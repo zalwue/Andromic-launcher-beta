@@ -1,3 +1,8 @@
+
+
+[![Telegram](https://andromichannel)](https://t.me)
+
+
 # Andromic Launcher
 
 A lightweight, offline-first Minecraft launcher with a clean HyperOS-inspired interface.
