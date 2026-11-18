@@ -57,17 +57,7 @@ jobs:
           pip install -r requirements.txt pyinstaller pillow
 
       - name: Build executable with PyInstaller
-        run: |
-          pyinstaller --noconfirm --onefile --windowed \
-            --name "${{ matrix.artifact_name }}" \
-            ${{ matrix.icon_flag }} \
-            --add-data "${{ matrix.add_data }}" \
-            --collect-all PySide6 \
-            --collect-all shiboken6 \
-            --hidden-import PySide6.QtCore \
-            --hidden-import PySide6.QtGui \
-            --hidden-import PySide6.QtWidgets \
-            main.py
+        run: pyinstaller --noconfirm --onefile --windowed --name "${{ matrix.artifact_name }}" ${{ matrix.icon_flag }} --add-data "${{ matrix.add_data }}" --collect-all PySide6 --hidden-import PySide6.QtCore --hidden-import PySide6.QtGui --hidden-import PySide6.QtWidgets main.py
 
       - name: Package macOS .app into .zip
         if: runner.os == 'macOS'
@@ -104,4 +94,3 @@ jobs:
             artifacts/andromic-launcher-windows.exe
             artifacts/andromic-launcher-linux
             artifacts/andromic-launcher-macos.zip
-
