@@ -2,8 +2,10 @@
 import sys
 import threading
 import traceback
+from pathlib import Path
 
 from PySide6.QtCore import QObject, QPropertyAnimation, QTimer, Qt, Signal
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (QApplication, QGraphicsOpacityEffect, QHBoxLayout, QLabel,
                                QMainWindow, QMessageBox, QStackedWidget, QVBoxLayout, QWidget)
 
@@ -31,6 +33,12 @@ NAV = (("play", "Play", "play", PlayPage), ("content", "Content", "content", Con
        ("console", "Console", "console", ConsolePage))
 
 
+def _get_icon() -> QIcon:
+    base = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[2]))
+    icon_file = base / "assets" / "icon.png"
+    return QIcon(str(icon_file)) if icon_file.exists() else QIcon()
+
+
 class Bridge(QObject):
     """Runs callables on the GUI thread; safe to trigger from worker threads."""
 
@@ -49,6 +57,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.app = app
         self.setWindowTitle(APP_NAME)
+        self.setWindowIcon(_get_icon())
         self.resize(1120, 760)
         self.setMinimumSize(1000, 680)
         self._fade = None
@@ -128,6 +137,7 @@ class App:
         theme.set_theme(self.cfg["theme"])
         self.qt = QApplication.instance() or QApplication(sys.argv)
         self.qt.setApplicationName("Andromic")
+        self.qt.setWindowIcon(_get_icon())
         self.qt.setFont(theme.init_fonts())
         self.qt.setStyleSheet(theme.stylesheet())
         self.bridge = Bridge()
@@ -235,3 +245,4 @@ def main():
     app = App()
     app.window.show()
     sys.exit(app.qt.exec())
+      
