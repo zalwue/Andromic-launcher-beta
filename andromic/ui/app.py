@@ -1,0 +1,237 @@
+"""Application object and main window."""
+import sys
+import threading
+import traceback
+
+from PySide6.QtCore import QObject, QPropertyAnimation, QTimer, Qt, Signal
+from PySide6.QtWidgets import (QApplication, QGraphicsOpacityEffect, QHBoxLayout, QLabel,
+                               QMainWindow, QMessageBox, QStackedWidget, QVBoxLayout, QWidget)
+
+from .. import APP_NAME, __version__
+from ..core.config import load_config, save_config
+from ..core.instances import new_instance
+from ..core.paths import ROOT, ensure_dirs
+from ..core.reporter import Reporter
+from ..core.system import open_path
+from ..core.versions import fetch_manifest, selectable_ids
+from ..i18n import set_language, tr as _
+from . import theme
+from .pages.console import ConsolePage
+from .pages.content import ContentPage
+from .pages.play import PlayPage
+from .pages.profiles import ProfilesPage
+from .pages.servers import ServersPage
+from .pages.settings import SettingsPage
+from .widgets import Button, label
+
+NAV = (("play", "Play", "play", PlayPage), ("content", "Content", "content", ContentPage),
+       ("servers", "Servers", "servers", ServersPage),
+       ("profiles", "Profiles", "profiles", ProfilesPage),
+       ("settings", "Settings", "settings", SettingsPage),
+       ("console", "Console", "console", ConsolePage))
+
+
+class Bridge(QObject):
+    """Runs callables on the GUI thread; safe to trigger from worker threads."""
+
+    call = Signal(object, object)
+
+    def __init__(self):
+        super().__init__()
+        self.call.connect(self._dispatch)
+
+    def _dispatch(self, fn, args):
+        fn(*args)
+
+
+class MainWindow(QMainWindow):
+    def __init__(self, app):
+        super().__init__()
+        self.app = app
+        self.setWindowTitle(APP_NAME)
+        self.resize(1120, 760)
+        self.setMinimumSize(1000, 680)
+        self._fade = None
+
+    def build(self):
+        app = self.app
+        root = QWidget()
+        root.setObjectName("root")
+        layout = QHBoxLayout(root)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(22)
+
+        side = QWidget()
+        side.setFixedWidth(210)
+        column = QVBoxLayout(side)
+        column.setContentsMargins(0, 0, 0, 0)
+        column.setSpacing(4)
+        column.addWidget(label("Andromic", 22, bold=True))
+        column.addWidget(label("Launcher", 10, muted=True))
+        column.addSpacing(22)
+
+        self.stack = QStackedWidget()
+        app.pages, self.nav = {}, {}
+        for key, title, icon, page_class in NAV:
+            button = Button(_(title), "nav", 44, icon=icon, size=11)
+            button.clicked.connect(lambda _c=False, k=key: app.show(k))
+            column.addWidget(button)
+            self.nav[key] = button
+            page = page_class(app)
+            app.pages[key] = page
+            self.stack.addWidget(page.frame)
+        column.addStretch()
+        folder = Button(_("Data folder"), "ghost", 36, anchor="left")
+        folder.clicked.connect(lambda _c=False: open_path(ROOT))
+        column.addWidget(folder)
+        column.addWidget(label(f"v{__version__}", 9, muted=True))
+
+        layout.addWidget(side)
+        layout.addWidget(self.stack, 1)
+        self.setCentralWidget(root)
+
+    def show_page(self, key):
+        app = self.app
+        page = app.pages[key]
+        old = self.stack.currentWidget()
+        snapshot = old.grab() if old is not None and self.isVisible() and old is not page.frame else None
+        for name, button in self.nav.items():
+            button.set_kind("nav_active" if name == key else "nav")
+        self.stack.setCurrentWidget(page.frame)
+        page.refresh()
+        if snapshot is not None:
+            overlay = QLabel(self.stack)
+            overlay.setPixmap(snapshot)
+            overlay.setGeometry(self.stack.rect())
+            overlay.show()
+            overlay.raise_()
+            effect = QGraphicsOpacityEffect(overlay)
+            overlay.setGraphicsEffect(effect)
+            anim = QPropertyAnimation(effect, b"opacity", overlay)
+            anim.setDuration(170)
+            anim.setStartValue(1.0)
+            anim.setEndValue(0.0)
+            anim.finished.connect(overlay.deleteLater)
+            anim.start()
+            self._fade = anim
+
+    def closeEvent(self, event):
+        self.app.save()
+        event.accept()
+
+
+class App:
+    def __init__(self):
+        ensure_dirs()
+        self.cfg = load_config()
+        set_language(self.cfg["lang"])
+        theme.set_theme(self.cfg["theme"])
+        self.qt = QApplication.instance() or QApplication(sys.argv)
+        self.qt.setApplicationName("Andromic")
+        self.qt.setFont(theme.init_fonts())
+        self.qt.setStyleSheet(theme.stylesheet())
+        self.bridge = Bridge()
+        self.manifest, self.busy, self.pages, self.current_page = [], False, {}, "play"
+        self.rep = Reporter(
+            log=lambda message: self.ui(self.pages["console"].append, message),
+            status=lambda message: self.ui(self.pages["play"].set_status, message),
+            progress=lambda done, total, text="": self.ui(self.pages["play"].set_progress,
+                                                         done, total, text))
+        self.window = MainWindow(self)
+        self.window.build()
+        self.show(self.current_page)
+        threading.Thread(target=self._load_manifest, daemon=True).start()
+
+    # ---- threading ----
+    def ui(self, fn, *args):
+        self.bridge.call.emit(fn, args)
+
+    def run_async(self, job, on_done=None, on_error=None):
+        def worker():
+            try:
+                result = job()
+            except Exception as exc:
+                self.rep.log(traceback.format_exc())
+                self.ui(self._fail, exc, on_error)
+                return
+            if on_done:
+                self.ui(on_done, result)
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _fail(self, exc, on_error):
+        self.pages["play"].set_status(str(exc))
+        if on_error:
+            on_error(exc)
+        self.error(str(exc))
+
+    # ---- message boxes ----
+    def info(self, text):
+        QMessageBox.information(self.window, APP_NAME, text)
+
+    def warn(self, text):
+        QMessageBox.warning(self.window, APP_NAME, text)
+
+    def error(self, text):
+        QMessageBox.critical(self.window, APP_NAME, text)
+
+    def ask(self, text) -> bool:
+        answer = QMessageBox.question(self.window, APP_NAME, text)
+        return answer == QMessageBox.StandardButton.Yes
+
+    # ---- state ----
+    def current_instance(self):
+        for inst in self.cfg["instances"]:
+            if inst["name"] == self.cfg["instance"]:
+                return inst
+        return self.cfg["instances"][0] if self.cfg["instances"] else None
+
+    def current_account(self):
+        for acc in self.cfg["accounts"]:
+            if acc["id"] == self.cfg["account"]:
+                return acc
+        return self.cfg["accounts"][0]
+
+    def save(self):
+        save_config(self.cfg)
+
+    def _load_manifest(self):
+        try:
+            versions = fetch_manifest()
+        except Exception:
+            self.ui(self.pages["play"].set_status, _("Version list is unavailable (offline)"))
+            return
+        self.ui(self._manifest_ready, versions)
+
+    def _manifest_ready(self, versions):
+        self.manifest = versions
+        if not self.cfg["instances"]:
+            name = _("Main")
+            self.cfg["instances"].append(new_instance(name, selectable_ids(versions)[0]))
+            self.cfg["instance"] = name
+        self.pages["play"].set_status(_("Ready"))
+        self.refresh()
+
+    # ---- navigation ----
+    def show(self, key):
+        self.current_page = key
+        self.window.show_page(key)
+
+    def refresh(self):
+        for page in self.pages.values():
+            page.refresh()
+
+    def rebuild(self):
+        self.save()
+        set_language(self.cfg["lang"])
+        theme.set_theme(self.cfg["theme"])
+        self.qt.setStyleSheet(theme.stylesheet())
+        self.window.build()
+        self.show(self.current_page)
+        if self.manifest:
+            self.pages["play"].set_status(_("Ready"))
+
+
+def main():
+    app = App()
+    app.window.show()
+    sys.exit(app.qt.exec())
