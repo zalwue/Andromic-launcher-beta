@@ -1,0 +1,80 @@
+name: Build Andromic Launcher
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: windows
+            artifact: AndromicLauncher-Windows.exe
+          - os: ubuntu-latest
+            platform: linux
+            artifact: AndromicLauncher-Linux
+          - os: macos-latest
+            platform: macos
+            artifact: AndromicLauncher-macOS.zip
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Linux dependencies
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-tk binutils
+
+      - name: Install build tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller
+
+      - name: Build for Windows
+        if: matrix.platform == 'windows'
+        run: |
+          pyinstaller --noconfirm --clean --onefile --windowed --name AndromicLauncher main.py
+          copy dist\AndromicLauncher.exe ${{ matrix.artifact }}
+
+      - name: Build for Linux
+        if: matrix.platform == 'linux'
+        run: |
+          pyinstaller --noconfirm --clean --onefile --windowed --name AndromicLauncher main.py
+          cp dist/AndromicLauncher ${{ matrix.artifact }}
+
+      - name: Build for macOS
+        if: matrix.platform == 'macos'
+        run: |
+          pyinstaller --noconfirm --clean --windowed --name "Andromic Launcher" main.py
+          cd dist
+          zip -r "../${{ matrix.artifact }}" "Andromic Launcher.app"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}
+
+      - name: Create Release on Tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ matrix.artifact }}
+          
