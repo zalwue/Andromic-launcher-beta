@@ -104,3 +104,4 @@ jobs:
             artifacts/andromic-launcher-windows.exe
             artifacts/andromic-launcher-linux
             artifacts/andromic-launcher-macos.zip
+
