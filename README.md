@@ -1,4 +1,4 @@
-- **Telegram:** [Andromic Channel](https://t.me/andromichannel)
+Follow development news, sneak peeks, and new releases - **Telegram:** [Andromic Channel](https://t.me/andromichannel)
 
 
 
