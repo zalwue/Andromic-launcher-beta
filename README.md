@@ -1,6 +1,7 @@
 
 
-[![Telegram](https://andromichannel)](https://t.me)
+- **Telegram:** [@andromichannel](https://t.me)
+
 
 
 # Andromic Launcher
