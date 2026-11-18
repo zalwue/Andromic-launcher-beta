@@ -17,13 +17,13 @@ jobs:
         include:
           - os: windows-latest
             platform: windows
-            artifact: AndromicLauncher-Windows.exe
+            artifact: andromic-launcher-windows.exe
           - os: ubuntu-latest
             platform: linux
-            artifact: AndromicLauncher-Linux
+            artifact: andromic-launcher-linux
           - os: macos-latest
             platform: macos
-            artifact: AndromicLauncher-macOS.zip
+            artifact: andromic-launcher-macos.zip
 
     runs-on: ${{ matrix.os }}
 
@@ -40,29 +40,30 @@ jobs:
         if: matrix.platform == 'linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y python3-tk binutils
+          sudo apt-get install -y binutils libxcb-cursor0 libxkbcommon-x11-0 libegl1 libgl1
 
-      - name: Install build tools
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
+          pip install -r requirements.txt
           pip install pyinstaller
 
       - name: Build for Windows
         if: matrix.platform == 'windows'
         run: |
-          pyinstaller --noconfirm --clean --onefile --windowed --name AndromicLauncher main.py
+          pyinstaller --noconfirm --clean --onefile --windowed --icon=assets/icon.ico --add-data "assets;assets" --name AndromicLauncher main.py
           copy dist\AndromicLauncher.exe ${{ matrix.artifact }}
 
       - name: Build for Linux
         if: matrix.platform == 'linux'
         run: |
-          pyinstaller --noconfirm --clean --onefile --windowed --name AndromicLauncher main.py
+          pyinstaller --noconfirm --clean --onefile --windowed --add-data "assets:assets" --name AndromicLauncher main.py
           cp dist/AndromicLauncher ${{ matrix.artifact }}
 
       - name: Build for macOS
         if: matrix.platform == 'macos'
         run: |
-          pyinstaller --noconfirm --clean --windowed --name "Andromic Launcher" main.py
+          pyinstaller --noconfirm --clean --windowed --icon=assets/icon.png --add-data "assets:assets" --name "Andromic Launcher" main.py
           cd dist
           zip -r "../${{ matrix.artifact }}" "Andromic Launcher.app"
 
