@@ -11,71 +11,96 @@ permissions:
 
 jobs:
   build:
+    name: Build (${{ matrix.os_name }})
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: windows-latest
-            platform: windows
-            artifact: andromic-launcher-windows.exe
-          - os: ubuntu-latest
-            platform: linux
-            artifact: andromic-launcher-linux
-          - os: macos-latest
-            platform: macos
-            artifact: andromic-launcher-macos.zip
-
-    runs-on: ${{ matrix.os }}
+          - os_name: Windows
+            runner: windows-latest
+            artifact_name: andromic-launcher-windows.exe
+            dist_path: dist/andromic-launcher-windows.exe
+            add_data: "assets;assets"
+            icon_flag: "--icon=assets/icon.ico"
+          - os_name: Linux
+            runner: ubuntu-latest
+            artifact_name: andromic-launcher-linux
+            dist_path: dist/andromic-launcher-linux
+            add_data: "assets:assets"
+            icon_flag: ""
+          - os_name: macOS
+            runner: macos-latest
+            artifact_name: andromic-launcher-macos
+            dist_path: dist/andromic-launcher-macos.app
+            add_data: "assets:assets"
+            icon_flag: "--icon=assets/icon.png"
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: '3.11'
 
-      - name: Install Linux dependencies
-        if: matrix.platform == 'linux'
+      - name: Install Linux system dependencies
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y binutils libxcb-cursor0 libxkbcommon-x11-0 libegl1 libgl1
 
-      - name: Install dependencies
+      - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pyinstaller pillow
+          pip install -r requirements.txt pyinstaller pillow
 
-      - name: Build for Windows
-        if: matrix.platform == 'windows'
+      - name: Build executable with PyInstaller
         run: |
-          pyinstaller --noconfirm --clean --onefile --windowed --icon=assets/icon.ico --add-data "assets;assets" --name AndromicLauncher main.py
-          copy dist\AndromicLauncher.exe ${{ matrix.artifact }}
+          pyinstaller --noconfirm --onefile --windowed \
+            --name "${{ matrix.artifact_name }}" \
+            ${{ matrix.icon_flag }} \
+            --add-data "${{ matrix.add_data }}" \
+            --collect-all PySide6 \
+            --collect-all shiboken6 \
+            --hidden-import PySide6.QtCore \
+            --hidden-import PySide6.QtGui \
+            --hidden-import PySide6.QtWidgets \
+            main.py
 
-      - name: Build for Linux
-        if: matrix.platform == 'linux'
+      - name: Package macOS .app into .zip
+        if: runner.os == 'macOS'
         run: |
-          pyinstaller --noconfirm --clean --onefile --windowed --add-data "assets:assets" --name AndromicLauncher main.py
-          cp dist/AndromicLauncher ${{ matrix.artifact }}
-
-      - name: Build for macOS
-        if: matrix.platform == 'macos'
-        run: |
-          pyinstaller --noconfirm --clean --windowed --icon=assets/icon.png --add-data "assets:assets" --name "Andromic Launcher" main.py
           cd dist
-          zip -r "../${{ matrix.artifact }}" "Andromic Launcher.app"
+          zip -r andromic-launcher-macos.zip andromic-launcher-macos.app
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact }}
-          path: ${{ matrix.artifact }}
+          name: ${{ matrix.os_name }}-build
+          path: |
+            dist/andromic-launcher-windows.exe
+            dist/andromic-launcher-linux
+            dist/andromic-launcher-macos.zip
+          if-no-files-found: ignore
 
-      - name: Create Release on Tag
-        if: startsWith(github.ref, 'refs/tags/v')
+  release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Attach binaries to release
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ matrix.artifact }}
-          
+          files: |
+            artifacts/andromic-launcher-windows.exe
+            artifacts/andromic-launcher-linux
+            artifacts/andromic-launcher-macos.zip
