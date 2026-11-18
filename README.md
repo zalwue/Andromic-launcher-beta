@@ -1,6 +1,11 @@
 
 
-- **Telegram:** [@andromichannel](https://t.me)
+<div align="center">
+  <img src="https://vercel.app" />
+
+  [![Telegram](https://shields.io)](https://t.me)
+</div>
+
 
 
 
