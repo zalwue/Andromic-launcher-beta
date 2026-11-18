@@ -1,7 +1,7 @@
 # Andromic Launcher
 
 A lightweight, offline-first Minecraft launcher with a clean HyperOS-inspired interface.
-Pure Python, standard library only. Runs on Windows, Linux and macOS.
+Written in Python with a PySide6 (Qt) interface. Runs on Windows, Linux and macOS.
 
 ## Features
 
@@ -22,9 +22,10 @@ Pure Python, standard library only. Runs on Windows, Linux and macOS.
 
 ## Run from source
 
-Requires Python 3.9+ with Tk (`python3-tk` on Debian/Ubuntu).
+Requires Python 3.9+.
 
 ```bash
+pip install -r requirements.txt
 python -m andromic
 ```
 
@@ -44,8 +45,8 @@ The result is placed in `dist/`.
 
 ```
 andromic/
-  core/   launcher logic, no GUI dependencies
-  ui/     Tk interface: theme, widgets, dialogs, pages
+  core/   launcher logic, no GUI dependencies (standard library only)
+  ui/     PySide6 interface: theme, widgets, dialogs, pages
   i18n.py translations
 main.py   entry point for packaging
 ```
