@@ -1,8 +1,3 @@
-Follow development news, sneak peeks, and new releases - **Telegram:** [Andromic Channel](https://t.me/andromichannel)
-
-
-
-
 
 # Andromic Launcher
 
@@ -72,6 +67,19 @@ Launcher data (versions, libraries, instances, runtimes) is stored in:
 - OptiFine cannot be downloaded automatically. Use *Get OptiFine* in the instance dialog,
   then *Install from jar*.
 - Offline accounts cannot join servers running in online mode.
+
+## Community & Updates
+
+Follow development news, sneak peeks, and new releases on our official Telegram channel:
+
+- **Telegram:** - [Our official channel](https://t.me/andromichannel)
+
+
+
+
+
+
+
 
 ## License
 
