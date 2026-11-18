@@ -34,7 +34,7 @@ NAV = (("play", "Play", "play", PlayPage), ("content", "Content", "content", Con
 
 
 def _get_icon() -> QIcon:
-    base = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[2]))
+    base = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent.parent))
     icon_file = base / "assets" / "icon.png"
     return QIcon(str(icon_file)) if icon_file.exists() else QIcon()
 
@@ -245,4 +245,4 @@ def main():
     app = App()
     app.window.show()
     sys.exit(app.qt.exec())
-      
+          
