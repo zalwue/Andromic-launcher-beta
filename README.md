@@ -67,14 +67,6 @@ Launcher data (versions, libraries, instances, runtimes) is stored in:
   then *Install from jar*.
 - Offline accounts cannot join servers running in online mode.
 
-## Community & Updates
-
-Follow development news, sneak peeks, and new releases on our official Telegram channel:
-
-- **Telegram:** [@andromichannel](https://t.me)
-
-
-
 ## License
 
 Andromic Launcher is free software released under the GNU General Public License v3.0.
