@@ -21,7 +21,7 @@ jobs:
             runner: windows-latest
             bin_prefix: windows
             add_data: "assets;assets"
-            icon_flag: "--icon=assets/icon.ico"
+            icon_flag: "--icon=assets/icon.png"
           - os_name: Linux
             runner: ubuntu-latest
             bin_prefix: linux
@@ -63,7 +63,15 @@ jobs:
           pip install -r requirements.txt pyinstaller pillow
 
       - name: Build executable with PyInstaller
-        run: pyinstaller --noconfirm --onefile --windowed --name "Andromic-launcher-${{ env.VERSION }}-${{ matrix.bin_prefix }}" ${{ matrix.icon_flag }} --add-data "${{ matrix.add_data }}" --collect-all PySide6 --hidden-import PySide6.QtCore --hidden-import PySide6.QtGui --hidden-import PySide6.QtWidgets main.py
+        run: >
+          pyinstaller --noconfirm --onefile --windowed
+          --name "Andromic-launcher-${{ env.VERSION }}-${{ matrix.bin_prefix }}"
+          ${{ matrix.icon_flag }}
+          --add-data "${{ matrix.add_data }}"
+          --hidden-import PySide6.QtCore
+          --hidden-import PySide6.QtGui
+          --hidden-import PySide6.QtWidgets
+          main.py
 
       - name: Package Linux (.zip and .deb)
         if: runner.os == 'Linux'
@@ -72,8 +80,8 @@ jobs:
           zip "Andromic-launcher-${VERSION}-linux.zip" "Andromic-launcher-${VERSION}-linux"
           cd ..
           DEB_VER="${VERSION#v}"
-          DEB_VER="${DEB_VER//-/\~}"
-          if [[ ! "$DEB_VER" =~ ^[0-9] ]]; then DEB_VER="0.0.0~${DEB_VER}"; fi
+          DEB_VER="${DEB_VER//-/\+}"
+          if [[ ! "$DEB_VER" =~ ^[0-9] ]]; then DEB_VER="0.0.0+${DEB_VER}"; fi
           mkdir -p deb_pkg/DEBIAN deb_pkg/usr/local/bin deb_pkg/usr/share/applications deb_pkg/usr/share/icons/hicolor/256x256/apps
           cp "dist/Andromic-launcher-${VERSION}-linux" deb_pkg/usr/local/bin/andromic-launcher
           chmod 755 deb_pkg/usr/local/bin/andromic-launcher
