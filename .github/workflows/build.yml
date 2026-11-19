@@ -9,6 +9,9 @@ on:
 permissions:
   contents: write
 
+env:
+  VERSION: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'dev' }}
+
 jobs:
   build:
     name: Build (${{ matrix.os_name }})
@@ -19,20 +22,17 @@ jobs:
         include:
           - os_name: Windows
             runner: windows-latest
-            artifact_name: andromic-launcher-windows.exe
-            dist_path: dist/andromic-launcher-windows.exe
+            bin_name: Andromic-launcher-${{ env.VERSION }}-windows
             add_data: "assets;assets"
             icon_flag: "--icon=assets/icon.ico"
           - os_name: Linux
             runner: ubuntu-latest
-            artifact_name: andromic-launcher-linux
-            dist_path: dist/andromic-launcher-linux
+            bin_name: Andromic-launcher-${{ env.VERSION }}-linux
             add_data: "assets:assets"
             icon_flag: ""
           - os_name: macOS
             runner: macos-latest
-            artifact_name: andromic-launcher-macos
-            dist_path: dist/andromic-launcher-macos.app
+            bin_name: Andromic-launcher-${{ env.VERSION }}-macos
             add_data: "assets:assets"
             icon_flag: "--icon=assets/icon.png"
 
@@ -57,22 +57,57 @@ jobs:
           pip install -r requirements.txt pyinstaller pillow
 
       - name: Build executable with PyInstaller
-        run: pyinstaller --noconfirm --onefile --windowed --name "${{ matrix.artifact_name }}" ${{ matrix.icon_flag }} --add-data "${{ matrix.add_data }}" --collect-all PySide6 --hidden-import PySide6.QtCore --hidden-import PySide6.QtGui --hidden-import PySide6.QtWidgets main.py
+        run: pyinstaller --noconfirm --onefile --windowed --name "${{ matrix.bin_name }}" ${{ matrix.icon_flag }} --add-data "${{ matrix.add_data }}" --collect-all PySide6 --hidden-import PySide6.QtCore --hidden-import PySide6.QtGui --hidden-import PySide6.QtWidgets main.py
 
-      - name: Package macOS .app into .zip
+      - name: Package Linux (.zip and .deb)
+        if: runner.os == 'Linux'
+        run: |
+          cd dist
+          zip "Andromic-launcher-${{ env.VERSION }}-linux.zip" "${{ matrix.bin_name }}"
+          cd ..
+          DEB_VER="${VERSION#v}"
+          DEB_VER="${DEB_VER//-/\~}"
+          mkdir -p deb_pkg/DEBIAN deb_pkg/usr/local/bin deb_pkg/usr/share/applications deb_pkg/usr/share/icons/hicolor/256x256/apps
+          cp "dist/${{ matrix.bin_name }}" deb_pkg/usr/local/bin/andromic-launcher
+          chmod 755 deb_pkg/usr/local/bin/andromic-launcher
+          cp assets/icon.png deb_pkg/usr/share/icons/hicolor/256x256/apps/andromic-launcher.png
+          cat <<EOF > deb_pkg/DEBIAN/control
+          Package: andromic-launcher
+          Version: ${DEB_VER}
+          Section: games
+          Priority: optional
+          Architecture: amd64
+          Maintainer: zalwue
+          Description: Lightweight HyperOS-inspired Minecraft Launcher
+          EOF
+          cat <<EOF > deb_pkg/usr/share/applications/andromic-launcher.desktop
+          [Desktop Entry]
+          Name=Andromic Launcher
+          Exec=/usr/local/bin/andromic-launcher
+          Icon=andromic-launcher
+          Type=Application
+          Categories=Game;
+          EOF
+          dpkg-deb --build deb_pkg "dist/Andromic-launcher-${{ env.VERSION }}-linux.deb"
+
+      - name: Package macOS (.zip and .pkg)
         if: runner.os == 'macOS'
         run: |
           cd dist
-          zip -r andromic-launcher-macos.zip andromic-launcher-macos.app
+          zip -r "Andromic-launcher-${{ env.VERSION }}-macos.zip" "${{ matrix.bin_name }}.app"
+          cd ..
+          pkgbuild --component "dist/${{ matrix.bin_name }}.app" --install-location /Applications "dist/Andromic-launcher-${{ env.VERSION }}-macos.pkg"
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.os_name }}-build
           path: |
-            dist/andromic-launcher-windows.exe
-            dist/andromic-launcher-linux
-            dist/andromic-launcher-macos.zip
+            dist/Andromic-launcher-${{ env.VERSION }}-windows.exe
+            dist/Andromic-launcher-${{ env.VERSION }}-linux.zip
+            dist/Andromic-launcher-${{ env.VERSION }}-linux.deb
+            dist/Andromic-launcher-${{ env.VERSION }}-macos.zip
+            dist/Andromic-launcher-${{ env.VERSION }}-macos.pkg
           if-no-files-found: ignore
 
   release:
@@ -91,6 +126,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            artifacts/andromic-launcher-windows.exe
-            artifacts/andromic-launcher-linux
-            artifacts/andromic-launcher-macos.zip
+            artifacts/Andromic-launcher-${{ env.VERSION }}-windows.exe
+            artifacts/Andromic-launcher-${{ env.VERSION }}-linux.zip
+            artifacts/Andromic-launcher-${{ env.VERSION }}-linux.deb
+            artifacts/Andromic-launcher-${{ env.VERSION }}-macos.zip
+            artifacts/Andromic-launcher-${{ env.VERSION }}-macos.pkg
+            
