@@ -1,7 +1,7 @@
 """Colour palettes, font selection and the application stylesheet."""
 from types import SimpleNamespace
 
-from PySide6.QtGui import QFont, QFontDatabase
+from PySide6.QtGui import QColor, QFont, QFontDatabase
 
 from . import icons
 
@@ -29,10 +29,20 @@ _PREFERRED = ("MiSans", "HarmonyOS Sans", "Segoe UI Variable Text", "Segoe UI", 
 _MONO = ("Cascadia Mono", "Consolas", "Menlo", "DejaVu Sans Mono", "Courier New")
 
 
-def set_theme(name: str) -> None:
+def set_theme(name: str, accent: str = "") -> None:
     global current
     current = name if name in PALETTES else "light"
-    for key, value in PALETTES[current].items():
+    palette = dict(PALETTES[current])
+    candidate = QColor(str(accent)) if accent else QColor()
+    if candidate.isValid():
+        palette["accent"] = candidate.name(QColor.NameFormat.HexRgb)
+        palette["accent_hover"] = candidate.darker(112).name(QColor.NameFormat.HexRgb)
+        if current == "dark":
+            soft = candidate.darker(260)
+        else:
+            soft = candidate.lighter(175)
+        palette["accent_soft"] = soft.name(QColor.NameFormat.HexRgb)
+    for key, value in palette.items():
         setattr(colors, key, value)
 
 

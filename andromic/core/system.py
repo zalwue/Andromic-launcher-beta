@@ -12,13 +12,30 @@ elif sys.platform == "darwin":
 else:
     OS = "linux"
 
-_machine = platform.machine().lower()
-if _machine in ("arm64", "aarch64"):
-    ARCH = "arm64"
-elif _machine in ("x86", "i386", "i686"):
-    ARCH = "x86"
-else:
-    ARCH = "x64"
+def _detect_architecture() -> str:
+    """Prefer the native hardware architecture, including Apple Silicon under Rosetta."""
+    machine = platform.machine().lower()
+    if OS == "osx":
+        try:
+            arm_capable = subprocess.check_output(
+                ["sysctl", "-n", "hw.optional.arm64"],
+                stderr=subprocess.DEVNULL, text=True, timeout=2
+            ).strip() == "1"
+            if arm_capable:
+                return "arm64"
+        except (OSError, subprocess.SubprocessError):
+            pass
+    if OS == "windows":
+        machine = (os.getenv("PROCESSOR_ARCHITEW6432")
+                   or os.getenv("PROCESSOR_ARCHITECTURE") or machine).lower()
+    if machine in ("arm64", "aarch64"):
+        return "arm64"
+    if machine in ("x86", "i386", "i686"):
+        return "x86"
+    return "x64"
+
+
+ARCH = _detect_architecture()
 
 CLASSPATH_SEP = ";" if OS == "windows" else ":"
 JAVA_BIN = "java.exe" if OS == "windows" else "java"

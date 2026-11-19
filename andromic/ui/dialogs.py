@@ -1,11 +1,16 @@
 """Modal dialogs."""
 import webbrowser
 
-from PySide6.QtWidgets import QDialog, QFileDialog, QHBoxLayout, QVBoxLayout, QWidget
+from PySide6.QtCore import QSize, Qt, QUrl
+from PySide6.QtGui import QDesktopServices, QIcon, QPixmap
+from PySide6.QtWidgets import (QDialog, QFileDialog, QHBoxLayout, QListWidget,
+                               QListWidgetItem, QVBoxLayout, QWidget)
 
 from ..core import optifine
 from ..core.constants import LOADERS, OPTIFINE_DOWNLOADS
 from ..core.instances import instance_dir, new_instance, unique_name
+from ..core.screenshots import list_screenshots, screenshot_dir
+from ..core.system import open_path
 from ..core.loaders import loader_versions
 from ..core.versions import selectable_ids
 from ..i18n import tr as _
@@ -157,3 +162,61 @@ class InstanceDialog(QDialog):
             instances[instances.index(self.instance)] = record
         self.accept()
         self.on_saved(name)
+
+
+class ScreenshotsDialog(QDialog):
+    """Simple per-instance screenshot gallery with native image opening."""
+
+    def __init__(self, app, instance):
+        super().__init__(app.window)
+        self.app, self.instance = app, instance
+        self.setWindowTitle(_("Screenshots") + " — " + instance["name"])
+        self.resize(720, 520)
+        root = QVBoxLayout(self)
+        self.gallery = QListWidget()
+        self.gallery.setViewMode(QListWidget.ViewMode.IconMode)
+        self.gallery.setResizeMode(QListWidget.ResizeMode.Adjust)
+        self.gallery.setMovement(QListWidget.Movement.Static)
+        self.gallery.setIconSize(QSize(120, 90))
+        self.gallery.setGridSize(QSize(164, 132))
+        self.gallery.itemDoubleClicked.connect(lambda _item: self._open_selected())
+        root.addWidget(self.gallery, 1)
+        actions = QHBoxLayout()
+        self.count = label("", 9, muted=True)
+        actions.addWidget(self.count)
+        actions.addStretch()
+        refresh = Button(_("Refresh"), "tonal", 38)
+        folder = Button(_("Open screenshots folder"), "tonal", 38)
+        open_button = Button(_("Open selected"), "primary", 38)
+        close = Button(_("Close"), height=38)
+        refresh.clicked.connect(lambda _c=False: self.refresh())
+        folder.clicked.connect(lambda _c=False: self._open_folder())
+        open_button.clicked.connect(lambda _c=False: self._open_selected())
+        close.clicked.connect(self.accept)
+        for button in (refresh, folder, open_button, close):
+            actions.addWidget(button)
+        root.addLayout(actions)
+        self.refresh()
+
+    def refresh(self):
+        self.gallery.clear()
+        files = list_screenshots(self.instance)
+        for path in files:
+            pixmap = QPixmap(str(path))
+            if not pixmap.isNull():
+                pixmap = pixmap.scaled(self.gallery.iconSize(), Qt.AspectRatioMode.KeepAspectRatio,
+                                       Qt.TransformationMode.SmoothTransformation)
+            item = QListWidgetItem(QIcon(pixmap), path.name)
+            item.setData(Qt.ItemDataRole.UserRole, str(path))
+            self.gallery.addItem(item)
+        self.count.setText(_("Screenshots: {count}").format(count=len(files)))
+
+    def _open_selected(self):
+        item = self.gallery.currentItem()
+        if item:
+            QDesktopServices.openUrl(QUrl.fromLocalFile(item.data(Qt.ItemDataRole.UserRole)))
+
+    def _open_folder(self):
+        folder = screenshot_dir(self.instance)
+        folder.mkdir(parents=True, exist_ok=True)
+        open_path(folder)

@@ -18,7 +18,10 @@ Written in Python with a PySide6 (Qt) interface. Runs on Windows, Linux and macO
 - One-click performance preset (Sodium, Lithium, Iris and friends)
 - Separate instances with their own mods, packs and worlds
 - Server list with live status (players, latency, version) and one-click join
-- World backups and a crash log analyser
+- World backups, per-instance screenshot gallery and crash log analyser with conservative one-click fixes
+- Prism Launcher / MultiMC ZIP import and Modrinth `.mrpack` import (drag and drop supported)
+- GitHub Releases update checks at startup and one-click download for the current OS
+- Custom Mimuix / HyperOS accent colour
 - Light and dark themes, English and Russian interface
 
 ## Run from source
@@ -58,9 +61,13 @@ Launcher data (versions, libraries, instances, runtimes) is stored in:
 |---------|----------------------------------------|
 | Windows | `%APPDATA%\Andromic`                   |
 | macOS   | `~/Library/Application Support/Andromic` |
-| Linux   | `~/.local/share/andromic`              |
+| Linux   | `~/.local/share/Andromic`              |
 
 ## Notes
+
+- The importer supports Prism Launcher and MultiMC exported ZIP archives.
+- The updater downloads the matching release asset; installation/replacement is manual to avoid replacing a running executable unsafely.
+- Microsoft OAuth is not configured in this build: it requires a registered Microsoft application client ID and redirect configuration.
 
 - Skins are applied through a generated resource pack that replaces the default player skins.
   They are visible only to you unless the server supports offline skins.
@@ -97,3 +104,17 @@ but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 GNU General Public License for more details.
 ```
+
+
+## Platform compatibility notes
+
+- Java runtime caches are separated by operating system and CPU architecture so switching
+  between native Apple Silicon and Intel/Rosetta environments cannot silently reuse an
+  incompatible runtime.
+- Apple Silicon detection uses the native hardware capability reported by macOS, including
+  when the launcher itself is running through Rosetta.
+- Minecraft starts with macOS-specific first-thread and Dock JVM options; the Dock icon is
+  included only when the packaged icon asset is available.
+- Qt Widgets use Qt's built-in high-DPI handling. The launcher avoids capturing and
+  compositing full-window screenshots during every navigation change to reduce UI work,
+  especially on Retina displays.

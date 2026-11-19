@@ -79,6 +79,10 @@ def install_libraries(version: dict, rep: Reporter):
 def extract_natives(archives, version_id: str) -> Path:
     target = NATIVES / version_id
     target.mkdir(parents=True, exist_ok=True)
+    # Remove stale native binaries from older loader/library combinations.
+    for stale in target.iterdir():
+        if stale.is_file() and stale.name.lower().endswith(NATIVE_EXTS):
+            stale.unlink(missing_ok=True)
     for archive in archives:
         try:
             with zipfile.ZipFile(archive) as z:

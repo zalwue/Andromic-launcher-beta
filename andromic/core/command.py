@@ -1,16 +1,20 @@
 """Construction of the Java command line used to start the game."""
 from typing import List
+from pathlib import Path
+import sys
 
 from .accounts import offline_uuid
 from .. import __version__
 from .paths import ASSETS, LIBRARIES
 from .rules import expand_args
-from .system import CLASSPATH_SEP
+from .system import CLASSPATH_SEP, OS
 
 _G1_FLAGS = [
-    "-XX:+UseG1GC", "-XX:+ParallelRefProcEnabled", "-XX:MaxGCPauseMillis=200",
-    "-XX:+UnlockExperimentalVMOptions", "-XX:+DisableExplicitGC",
-    "-XX:G1NewSizePercent=30", "-XX:G1MaxNewSizePercent=40", "-XX:G1HeapRegionSize=8M",
+    "-XX:+UseG1GC",
+    "-XX:+ParallelRefProcEnabled",
+    "-XX:MaxGCPauseMillis=200",
+    "-XX:+DisableExplicitGC",
+    "-XX:+UseStringDeduplication",
 ]
 
 
@@ -69,4 +73,16 @@ def build_command(version: dict, version_id: str, java: str, settings: dict, nic
     memory = [f"-Xmx{settings['ram']}M", f"-Xms{min(settings['ram'], 1024)}M"]
     tuning = _G1_FLAGS if settings["optimize_jvm"] else []
     user_args = settings["jvm_args"].split()
-    return [java, *memory, *tuning, *user_args, *extra_jvm, *jvm, version["mainClass"], *game]
+    platform_args = []
+    if OS == "osx":
+        # GLFW/LWJGL needs the JVM on macOS's first thread.
+        platform_args.append("-XstartOnFirstThread")
+        platform_args.append("-Xdock:name=Minecraft")
+        resource_root = Path(getattr(
+            sys, "_MEIPASS", Path(__file__).resolve().parents[2]
+        ))
+        dock_icon = resource_root / "assets" / "icon.png"
+        if dock_icon.is_file():
+            platform_args.append(f"-Xdock:icon={dock_icon}")
+    return [java, *memory, *tuning, *user_args, *extra_jvm, *platform_args,
+            *jvm, version["mainClass"], *game]

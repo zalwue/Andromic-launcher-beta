@@ -63,7 +63,8 @@ def install_project(project: str, dest: Path, mc: Optional[str] = None,
         return None
     version = versions[0]
     file = primary_file(version)
-    download(file["url"], Path(dest) / file["filename"], file.get("hashes", {}).get("sha1"))
+    download(file["url"], Path(dest) / file["filename"],
+             file.get("hashes", {}).get("sha1"), file.get("size"))
     log(f"Installed {file['filename']}")
     if dependencies:
         for dep in version.get("dependencies", []):

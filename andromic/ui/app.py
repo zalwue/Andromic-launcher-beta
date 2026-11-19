@@ -4,9 +4,9 @@ import threading
 import traceback
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QPropertyAnimation, QTimer, Qt, Signal
+from PySide6.QtCore import QObject, Signal
 from PySide6.QtGui import QIcon
-from PySide6.QtWidgets import (QApplication, QGraphicsOpacityEffect, QHBoxLayout, QLabel,
+from PySide6.QtWidgets import (QApplication, QHBoxLayout,
                                QMainWindow, QMessageBox, QStackedWidget, QVBoxLayout, QWidget)
 
 from .. import APP_NAME, __version__
@@ -15,6 +15,7 @@ from ..core.instances import new_instance
 from ..core.paths import ROOT, ensure_dirs
 from ..core.reporter import Reporter
 from ..core.system import open_path
+from ..core import updater
 from ..core.versions import fetch_manifest, selectable_ids
 from ..i18n import set_language, tr as _
 from . import theme
@@ -60,8 +61,6 @@ class MainWindow(QMainWindow):
         self.setWindowIcon(_get_icon())
         self.resize(1120, 760)
         self.setMinimumSize(1000, 680)
-        self._fade = None
-
     def build(self):
         app = self.app
         root = QWidget()
@@ -102,27 +101,10 @@ class MainWindow(QMainWindow):
     def show_page(self, key):
         app = self.app
         page = app.pages[key]
-        old = self.stack.currentWidget()
-        snapshot = old.grab() if old is not None and self.isVisible() and old is not page.frame else None
         for name, button in self.nav.items():
             button.set_kind("nav_active" if name == key else "nav")
         self.stack.setCurrentWidget(page.frame)
         page.refresh()
-        if snapshot is not None:
-            overlay = QLabel(self.stack)
-            overlay.setPixmap(snapshot)
-            overlay.setGeometry(self.stack.rect())
-            overlay.show()
-            overlay.raise_()
-            effect = QGraphicsOpacityEffect(overlay)
-            overlay.setGraphicsEffect(effect)
-            anim = QPropertyAnimation(effect, b"opacity", overlay)
-            anim.setDuration(170)
-            anim.setStartValue(1.0)
-            anim.setEndValue(0.0)
-            anim.finished.connect(overlay.deleteLater)
-            anim.start()
-            self._fade = anim
 
     def closeEvent(self, event):
         self.app.save()
@@ -134,7 +116,7 @@ class App:
         ensure_dirs()
         self.cfg = load_config()
         set_language(self.cfg["lang"])
-        theme.set_theme(self.cfg["theme"])
+        theme.set_theme(self.cfg["theme"], self.cfg.get("accent_color", ""))
         self.qt = QApplication.instance() or QApplication(sys.argv)
         self.qt.setApplicationName("Andromic")
         self.qt.setWindowIcon(_get_icon())
@@ -151,6 +133,7 @@ class App:
         self.window.build()
         self.show(self.current_page)
         threading.Thread(target=self._load_manifest, daemon=True).start()
+        threading.Thread(target=self._check_updates_worker, daemon=True).start()
 
     # ---- threading ----
     def ui(self, fn, *args):
@@ -215,11 +198,42 @@ class App:
     def _manifest_ready(self, versions):
         self.manifest = versions
         if not self.cfg["instances"]:
+            available = selectable_ids(versions)
+            if not available:
+                self.pages["play"].set_status(
+                    _("No supported Minecraft versions were found")
+                )
+                return
             name = _("Main")
-            self.cfg["instances"].append(new_instance(name, selectable_ids(versions)[0]))
+            self.cfg["instances"].append(new_instance(name, available[0]))
             self.cfg["instance"] = name
         self.pages["play"].set_status(_("Ready"))
         self.refresh()
+
+    def _check_updates_worker(self):
+        try:
+            release = updater.check_latest_release()
+        except Exception as exc:
+            self.rep.log(f"Update check skipped: {exc}")
+            self.ui(self._update_check_failed, str(exc))
+            return
+        self.ui(self._updates_checked, release)
+
+    def _update_check_failed(self, message):
+        settings_page = self.pages.get("settings")
+        if settings_page:
+            settings_page.update_status.setText(_("Update check failed: {error}").format(error=message))
+
+    def _updates_checked(self, release):
+        settings_page = self.pages.get("settings")
+        if release:
+            self.update_release = release
+            if settings_page:
+                settings_page.set_update_release(release)
+            self.info(_("Andromic {version} is available. Open Settings to download it.")
+                      .format(version=release["version"]))
+        elif settings_page:
+            settings_page.set_up_to_date()
 
     # ---- navigation ----
     def show(self, key):
@@ -233,7 +247,7 @@ class App:
     def rebuild(self):
         self.save()
         set_language(self.cfg["lang"])
-        theme.set_theme(self.cfg["theme"])
+        theme.set_theme(self.cfg["theme"], self.cfg.get("accent_color", ""))
         self.qt.setStyleSheet(theme.stylesheet())
         self.window.build()
         self.show(self.current_page)

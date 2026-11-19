@@ -10,7 +10,7 @@ from .constants import RUNTIME_URL
 from .net import download_many, get_json, http_get
 from .paths import RUNTIME
 from .reporter import Reporter
-from .system import JAVA_BIN, OS, adoptium_target, make_executable, mojang_runtime_key
+from .system import ARCH, JAVA_BIN, OS, adoptium_target, make_executable, mojang_runtime_key
 
 
 def guess_major(mc: str) -> Optional[int]:
@@ -32,13 +32,14 @@ def guess_major(mc: str) -> Optional[int]:
 def find_java(root: Path) -> Optional[Path]:
     if not root.exists():
         return None
-    for candidate in root.glob(f"**/bin/{JAVA_BIN}"):
-        return candidate
+    candidates = sorted(root.glob(f"**/bin/{JAVA_BIN}"))
+    if candidates:
+        return candidates[0]
     return None
 
 
 def _mojang_runtime(component: str, rep: Reporter) -> Optional[str]:
-    dest = RUNTIME / component
+    dest = RUNTIME / f"{component}-{OS}-{ARCH}"
     java = find_java(dest)
     if java and (dest / ".complete").exists():
         return str(java)
@@ -76,7 +77,7 @@ def _mojang_runtime(component: str, rep: Reporter) -> Optional[str]:
 
 def _adoptium_runtime(major: int, rep: Reporter) -> str:
     major = 17 if major == 16 else major
-    dest = RUNTIME / f"temurin-{major}"
+    dest = RUNTIME / f"temurin-{major}-{OS}-{ARCH}"
     java = find_java(dest)
     if java:
         return str(java)

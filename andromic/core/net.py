@@ -25,8 +25,17 @@ def get_json(url: str):
 def download(url, dest, sha1=None, size=None, retries=3):
     """Download a file unless it already exists with the expected size."""
     dest = Path(dest)
-    if dest.exists() and (size is None or dest.stat().st_size == size):
-        return
+    if dest.is_file():
+        size_ok = size is None or dest.stat().st_size == size
+        checksum_ok = True
+        if sha1 and size_ok:
+            digest = hashlib.sha1()
+            with dest.open("rb") as existing:
+                for chunk in iter(lambda: existing.read(1024 * 1024), b""):
+                    digest.update(chunk)
+            checksum_ok = digest.hexdigest() == sha1
+        if size_ok and checksum_ok:
+            return
     dest.parent.mkdir(parents=True, exist_ok=True)
     for attempt in range(retries):
         try:

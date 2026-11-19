@@ -122,6 +122,37 @@ RU = {
     "Offline": "Недоступен",
     "Checking…": "Проверка…",
     "Choose a server first": "Сначала выберите сервер",
+    "Screenshots": "Скриншоты",
+    "Screenshots: {count}": "Скриншотов: {count}",
+    "Open screenshots folder": "Открыть папку скриншотов",
+    "Open selected": "Открыть выбранный",
+    "Close": "Закрыть",
+    "Import pack": "Импорт сборки",
+    "Import modpack": "Импорт сборки модов",
+    "Drop a Prism / MultiMC ZIP or Modrinth .mrpack here":
+        "Перетащите сюда ZIP из Prism / MultiMC или Modrinth .mrpack",
+    "Importing modpack…": "Импорт сборки…",
+    "Imported: {name}": "Импортировано: {name}",
+    "Apply these fixes and retry once?": "Применить исправления и повторить запуск один раз?",
+    "Accent colour (Mimuix / HyperOS)": "Акцентный цвет (Mimuix / HyperOS)",
+    "Choose accent colour": "Выберите акцентный цвет",
+    "Updates": "Обновления",
+    "Check GitHub Releases when Andromic starts.": "Проверять GitHub Releases при запуске Andromic.",
+    "No update checked yet": "Обновления ещё не проверялись",
+    "Check now": "Проверить сейчас",
+    "Download update": "Скачать обновление",
+    "Checking GitHub Releases…": "Проверка GitHub Releases…",
+    "Andromic is up to date": "У вас актуальная версия Andromic",
+    "Update check failed: {error}": "Не удалось проверить обновления: {error}",
+    "Version {version} is available": "Доступна версия {version}",
+    "Version {version} is available, but no build was published for this OS":
+        "Доступна версия {version}, но сборка для этой ОС не опубликована",
+    "Downloading update…": "Скачивание обновления…",
+    "Downloaded: {name}": "Скачано: {name}",
+    "The update was downloaded. Close Andromic and install or replace it manually.":
+        "Обновление скачано. Закройте Andromic и установите его или замените приложение вручную.",
+    "Andromic {version} is available. Open Settings to download it.":
+        "Доступна версия Andromic {version}. Откройте настройки, чтобы скачать её.",
 }
 
 

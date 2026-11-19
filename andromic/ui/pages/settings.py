@@ -1,8 +1,10 @@
 from PySide6.QtCore import QTimer, Qt
-from PySide6.QtWidgets import (QFileDialog, QFrame, QHBoxLayout, QScrollArea, QVBoxLayout,
-                               QWidget)
+from PySide6.QtGui import QColor
+from PySide6.QtWidgets import (QColorDialog, QFileDialog, QFrame, QHBoxLayout, QScrollArea,
+                               QVBoxLayout, QWidget)
 
-from ...core.system import total_ram_mb
+from ...core.system import open_path, total_ram_mb
+from ...core import updater
 from ...i18n import tr as _
 from ..widgets import (Button, Card, Field, Segmented, Select, SliderRow, ToggleRow, label,
                        page_title)
@@ -121,8 +123,76 @@ class SettingsPage:
         language = Segmented([("ru", "Русский"), ("en", "English")], cfg["lang"])
         language.changed.connect(lambda value: self._restyle("lang", value))
         launcher.addWidget(language, 0, Qt.AlignmentFlag.AlignLeft)
+        caption(launcher, _("Accent colour (Mimuix / HyperOS)"))
+        self.accent_button = Button(cfg.get("accent_color", "#3482FF"), "tonal", 36)
+        self.accent_button.clicked.connect(lambda _c=False: self._choose_accent())
+        launcher.addWidget(self.accent_button, 0, Qt.AlignmentFlag.AlignLeft)
+
+        updates = section(right, _("Updates"))
+        updates.addWidget(label(_("Check GitHub Releases when Andromic starts."),
+                                9, muted=True, wrap=True))
+        self.update_status = label(_("No update checked yet"), 9, muted=True, wrap=True)
+        updates.addWidget(self.update_status)
+        update_actions = QHBoxLayout()
+        self.check_update_button = Button(_("Check now"), "tonal", 38)
+        self.check_update_button.clicked.connect(lambda _c=False: self._check_updates())
+        self.download_update_button = Button(_("Download update"), "primary", 38)
+        self.download_update_button.setEnabled(False)
+        self.download_update_button.clicked.connect(lambda _c=False: self._download_update())
+        update_actions.addWidget(self.check_update_button)
+        update_actions.addWidget(self.download_update_button)
+        updates.addLayout(update_actions)
+        self.update_release = None
         left.addStretch()
         right.addStretch()
+
+    def _choose_accent(self):
+        current = QColor(self.app.cfg.get("accent_color", "#3482FF"))
+        color = QColorDialog.getColor(current, self.frame, _("Choose accent colour"))
+        if color.isValid():
+            self.app.cfg["accent_color"] = color.name(QColor.NameFormat.HexRgb)
+            self.accent_button.set_text(self.app.cfg["accent_color"])
+            self.app.rebuild()
+
+    def set_update_release(self, release):
+        self.update_release = release
+        asset = release.get("asset")
+        self.update_status.setText(
+            _("Version {version} is available").format(version=release["version"])
+            if asset else _("Version {version} is available, but no build was published for this OS")
+            .format(version=release["version"]))
+        self.download_update_button.setEnabled(bool(asset))
+
+    def set_up_to_date(self):
+        self.update_release = None
+        self.update_status.setText(_("Andromic is up to date"))
+        self.download_update_button.setEnabled(False)
+
+    def _check_updates(self):
+        self.update_status.setText(_("Checking GitHub Releases…"))
+        def done(release):
+            if release:
+                self.set_update_release(release)
+            else:
+                self.update_release = None
+                self.update_status.setText(_("Andromic is up to date"))
+                self.download_update_button.setEnabled(False)
+        self.app.run_async(updater.check_latest_release, done)
+
+    def _download_update(self):
+        if not self.update_release or not self.update_release.get("asset"):
+            return
+        self.download_update_button.setEnabled(False)
+        self.update_status.setText(_("Downloading update…"))
+        def done(path):
+            self.update_status.setText(_("Downloaded: {name}").format(name=path.name))
+            self.download_update_button.setEnabled(True)
+            open_path(path.parent)
+            self.app.info(_("The update was downloaded. Close Andromic and install or replace it manually."))
+        def failed(exc):
+            self.download_update_button.setEnabled(True)
+            self.update_status.setText(str(exc))
+        self.app.run_async(lambda: updater.download_update(self.update_release), done, failed)
 
     def _browse_java(self):
         path, _filter = QFileDialog.getOpenFileName(self.frame, "Java")

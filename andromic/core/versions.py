@@ -31,11 +31,10 @@ def selectable_ids(manifest: List[dict], snapshots: bool = False) -> List[str]:
 
 def ensure_vanilla(manifest: List[dict], mc: str, rep: Reporter) -> dict:
     meta = VERSIONS / mc / f"{mc}.json"
-    if not meta.exists():
-        entry = next((v for v in manifest if v["id"] == mc), None)
-        if entry is None:
-            raise RuntimeError(f"Version {mc} was not found in the manifest")
-        download(entry["url"], meta, entry.get("sha1"))
+    entry = next((v for v in manifest if v["id"] == mc), None)
+    if entry is None:
+        raise RuntimeError(f"Version {mc} was not found in the manifest")
+    download(entry["url"], meta, entry.get("sha1"), entry.get("size"))
     version = json.loads(meta.read_text("utf-8"))
     client = version["downloads"]["client"]
     rep.status(f"Client {mc}")

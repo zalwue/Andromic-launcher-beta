@@ -1,22 +1,53 @@
 import shutil
+from pathlib import Path
 
-from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QProgressBar, QVBoxLayout, QWidget
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtWidgets import (QFileDialog, QHBoxLayout, QLabel, QProgressBar,
+                               QVBoxLayout, QWidget)
 
-from ...core import accounts, crash
+from ...core import accounts, crash, importers
 from ...core.instances import backup_worlds, instance_dir
+from ...core.modpacks import install_mrpack
 from ...core.java import guess_major
 from ...core.launcher import GameLauncher
-from ...core.system import open_path
+from ...core.system import open_path, total_ram_mb
 from ...i18n import tr as _
 from ..avatars import head_pixmap
-from ..dialogs import InstanceDialog
+from ..dialogs import InstanceDialog, ScreenshotsDialog
 from ..widgets import Button, Card, Select, label, page_title
+
+
+class ImportDropZone(QLabel):
+    pathDropped = Signal(str)
+
+    def __init__(self):
+        super().__init__(_("Drop a Prism / MultiMC ZIP or Modrinth .mrpack here"))
+        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.setMinimumHeight(48)
+        self.setAcceptDrops(True)
+        self.setStyleSheet("border: 1px dashed #858B98; border-radius: 12px; padding: 8px;")
+
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasUrls() and any(
+                url.isLocalFile() and url.toLocalFile().lower().endswith((".zip", ".mrpack"))
+                for url in event.mimeData().urls()):
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event):
+        for url in event.mimeData().urls():
+            if url.isLocalFile() and url.toLocalFile().lower().endswith((".zip", ".mrpack")):
+                self.pathDropped.emit(url.toLocalFile())
+                event.acceptProposedAction()
+                return
+        event.ignore()
 
 
 class PlayPage:
     def __init__(self, app):
         self.app = app
+        self._auto_fix_retry_used = False
         self.frame = QWidget()
         root = QVBoxLayout(self.frame)
         root.setContentsMargins(0, 0, 0, 0)
@@ -74,12 +105,18 @@ class PlayPage:
         root.addWidget(self.status)
 
         tools = QHBoxLayout()
-        for text, callback in ((_("Open folder"), self.open_folder), (_("Back up worlds"), self.backup)):
+        for text, callback in ((_("Open folder"), self.open_folder),
+                               (_("Back up worlds"), self.backup),
+                               (_("Screenshots"), self.open_screenshots),
+                               (_("Import pack"), self.choose_import)):
             button = Button(text, height=36)
             button.clicked.connect(lambda _checked=False, cb=callback: cb())
             tools.addWidget(button)
         tools.addStretch()
         root.addLayout(tools)
+        self.drop_zone = ImportDropZone()
+        self.drop_zone.pathDropped.connect(self.import_archive)
+        root.addWidget(self.drop_zone)
         root.addStretch()
 
     # ---- display ----
@@ -176,6 +213,35 @@ class PlayPage:
             folder.mkdir(parents=True, exist_ok=True)
             open_path(folder)
 
+    def open_screenshots(self):
+        inst = self.app.current_instance()
+        if inst:
+            ScreenshotsDialog(self.app, inst).exec()
+
+    def choose_import(self):
+        path, _filter = QFileDialog.getOpenFileName(
+            self.frame, _("Import modpack"), "",
+            "Minecraft packs (*.zip *.mrpack);;ZIP archives (*.zip);;Modrinth packs (*.mrpack)")
+        if path:
+            self.import_archive(path)
+
+    def import_archive(self, path):
+        path = str(path)
+        existing = [item["name"] for item in self.app.cfg["instances"]]
+        self.set_status(_("Importing modpack…"))
+        if path.lower().endswith(".mrpack"):
+            job = lambda: install_mrpack(Path(path), Path(path).stem, existing, self.app.rep)
+        else:
+            job = lambda: importers.import_prism_multimc(Path(path), Path(path).stem, existing)
+
+        def done(instance):
+            self.app.cfg["instances"].append(instance)
+            self.app.cfg["instance"] = instance["name"]
+            self.app.save()
+            self.app.refresh()
+            self.set_status(_("Imported: {name}").format(name=instance["name"]))
+        self.app.run_async(job, done)
+
     def backup(self):
         inst = self.app.current_instance()
         if not inst:
@@ -188,7 +254,9 @@ class PlayPage:
         self.app.run_async(lambda: backup_worlds(inst), done)
 
     # ---- launching ----
-    def start(self, server=None):
+    def start(self, server=None, _auto_retry=False):
+        if not _auto_retry:
+            self._auto_fix_retry_used = False
         app = self.app
         inst, acc = app.current_instance(), app.current_account()
         if inst and server:
@@ -218,8 +286,17 @@ class PlayPage:
                             _("Game exited with code {code}").format(code=code))
             if code != 0:
                 hints = crash.analyze(launcher.log_tail)
-                app.warn("\n\n".join(hints) if hints
-                         else _("The game crashed. See the console for details."))
+                plan = crash.auto_fix_plan(launcher.log_tail, app.cfg, inst, total_ram_mb())
+                if (plan["actions"] and not self._auto_fix_retry_used and app.ask(
+                        "\n".join(plan["actions"]) + "\n\n" +
+                        _("Apply these fixes and retry once?"))):
+                    self._auto_fix_retry_used = True
+                    app.cfg.update(plan["changes"])
+                    app.save()
+                    self.start(_auto_retry=True)
+                else:
+                    app.warn("\n\n".join(hints) if hints
+                             else _("The game crashed. See the console for details."))
 
         def failed(_exc):
             app.busy = False

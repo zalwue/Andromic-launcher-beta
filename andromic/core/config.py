@@ -6,6 +6,7 @@ from .paths import CONFIG_FILE
 
 DEFAULTS = {
     "theme": "light",
+    "accent_color": "#3482FF",
     "lang": "ru",
     "ram": 4096,
     "width": "1280",
@@ -52,14 +53,20 @@ def save_config(cfg: dict) -> None:
 
 
 def sanitize_settings(cfg: dict) -> dict:
-    """Return a copy of the settings with numeric fields coerced to valid ints."""
-    out = dict(cfg)
-    for key, low in (("width", 320), ("height", 240)):
+    """Return settings with numeric values coerced and clamped to safe ranges."""
+    out = dict(DEFAULTS)
+    out.update(cfg)
+
+    def bounded_int(key, low, high):
         try:
-            out[key] = max(low, int(out[key]))
-        except (TypeError, ValueError):
-            out[key] = int(DEFAULTS[key])
-    out["ram"] = max(512, int(out["ram"]))
-    out["render_distance"] = int(out["render_distance"])
-    out["max_fps"] = int(out["max_fps"])
+            value = int(out.get(key, DEFAULTS[key]))
+        except (TypeError, ValueError, OverflowError):
+            value = int(DEFAULTS[key])
+        out[key] = min(high, max(low, value))
+
+    bounded_int("width", 320, 16384)
+    bounded_int("height", 240, 16384)
+    bounded_int("ram", 512, 65536)
+    bounded_int("render_distance", 2, 32)
+    bounded_int("max_fps", 10, 260)
     return out

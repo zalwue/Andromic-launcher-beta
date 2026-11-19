@@ -9,10 +9,27 @@ from typing import Tuple
 
 def split_address(address: str) -> Tuple[str, int]:
     address = address.strip()
-    host, sep, port = address.rpartition(":")
-    if sep and host and port.isdigit():
-        return host, int(port)
-    return address, 25565
+    if address.startswith("["):
+        closing = address.find("]")
+        if closing < 0:
+            raise ValueError("Invalid IPv6 server address")
+        host = address[1:closing]
+        suffix = address[closing + 1:]
+        if not suffix:
+            return host, 25565
+        if not suffix.startswith(":") or not suffix[1:].isdigit():
+            raise ValueError("Invalid server port")
+        port = int(suffix[1:])
+    else:
+        host, sep, raw_port = address.rpartition(":")
+        # A bare IPv6 address has several colons and no unambiguous port.
+        if sep and host and raw_port.isdigit() and ":" not in host:
+            port = int(raw_port)
+        else:
+            return address, 25565
+    if not host or not 1 <= port <= 65535:
+        raise ValueError("Server port must be between 1 and 65535")
+    return host, port
 
 
 def _varint(value: int) -> bytes:
@@ -69,8 +86,8 @@ def _flatten(node) -> str:
 
 def ping(address: str, timeout: float = 4.0) -> dict:
     """Query a server; returns a dict with `online` and, if reachable, details."""
-    host, port = split_address(address)
     try:
+        host, port = split_address(address)
         with socket.create_connection((host, port), timeout=timeout) as sock:
             sock.settimeout(timeout)
             handshake = (_varint(0x00) + _varint(-1) + _string(host)
@@ -80,6 +97,8 @@ def ping(address: str, timeout: float = 4.0) -> dict:
             if _read_varint(sock) != 0x00:
                 raise ValueError("unexpected packet")
             length = _read_varint(sock)
+            if length < 1 or length > 1024 * 1024:
+                raise ValueError("invalid status response size")
             data = json.loads(_recv_exact(sock, length).decode("utf-8", errors="replace"))
 
             latency = None

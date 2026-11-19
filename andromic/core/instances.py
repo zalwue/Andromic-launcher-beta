@@ -8,7 +8,15 @@ from .paths import BACKUPS, INSTANCES
 
 
 def safe_name(name: str) -> str:
-    return re.sub(r'[\\/:*?"<>|]+', "_", name).strip() or "instance"
+    cleaned = re.sub(r'[\\/:*?"<>|]+', "_", str(name)).strip().rstrip(".")
+    if cleaned in ("", ".", ".."):
+        return "instance"
+    # Windows reserves these device names even when an extension is present.
+    stem = cleaned.split(".", 1)[0].upper()
+    if stem in {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)),
+                *(f"LPT{i}" for i in range(1, 10))}:
+        cleaned = f"_{cleaned}"
+    return cleaned
 
 
 def unique_name(name: str, existing) -> str:
