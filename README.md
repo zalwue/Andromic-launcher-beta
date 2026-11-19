@@ -82,7 +82,7 @@ Follow development news, sneak peeks, and new releases on our official Telegram 
 - **Telegram:** - [Our official channel](https://t.me/andromichannel)
 
 
-
+- **Telegram Discussed:** - [Our official Telegram Discussed](https://t.me/andromichannelofficialduscussed
 
 
 
