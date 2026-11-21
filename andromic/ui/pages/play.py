@@ -5,8 +5,8 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (QFileDialog, QHBoxLayout, QLabel, QProgressBar,
                                QVBoxLayout, QWidget)
 
-from ...core import accounts, crash, importers
-from ...core.instances import backup_worlds, instance_dir
+from ...core import accounts, backup, crash, importers
+from ...core.instances import instance_dir
 from ...core.modpacks import install_mrpack
 from ...core.java import guess_major
 from ...core.launcher import GameLauncher
@@ -248,10 +248,16 @@ class PlayPage:
             return
         self.set_status(_("Backing up worlds"))
 
+        def job():
+            path = backup.create_backup(inst, "worlds")
+            if path is not None:
+                backup.prune_backups(inst, int(self.app.cfg.get("auto_backup_keep", 5)))
+            return path
+
         def done(path):
             self.set_status(_("Backup saved: {name}").format(name=path.name) if path
                             else _("No worlds to back up"))
-        self.app.run_async(lambda: backup_worlds(inst), done)
+        self.app.run_async(job, done)
 
     # ---- launching ----
     def start(self, server=None, _auto_retry=False):

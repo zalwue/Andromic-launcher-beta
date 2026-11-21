@@ -23,11 +23,14 @@ DEFAULTS = {
     "hide_launcher": False,
     "fabric_api": True,
     "auto_backup": False,
+    "auto_backup_keep": 5,
     "accounts": [],
     "account": "",
     "instances": [],
     "instance": "",
     "servers": [],
+    "rooms": [],
+    "customization": {},
 }
 
 
@@ -37,6 +40,9 @@ def load_config() -> dict:
         cfg.update(json.loads(CONFIG_FILE.read_text("utf-8")))
     except (OSError, ValueError):
         pass
+    for key in ("accounts", "instances", "servers", "rooms"):
+        if not isinstance(cfg.get(key), list):
+            cfg[key] = []
     if not cfg["accounts"]:
         cfg["accounts"] = [new_account()]
     if cfg["account"] not in {a["id"] for a in cfg["accounts"]}:
@@ -69,4 +75,5 @@ def sanitize_settings(cfg: dict) -> dict:
     bounded_int("ram", 512, 65536)
     bounded_int("render_distance", 2, 32)
     bounded_int("max_fps", 10, 260)
+    bounded_int("auto_backup_keep", 1, 50)
     return out

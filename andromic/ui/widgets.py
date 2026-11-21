@@ -19,7 +19,7 @@ def mix(a: QColor, b: QColor, t: float) -> QColor:
 
 def _animation(owner, callback, duration=150) -> QVariantAnimation:
     anim = QVariantAnimation(owner)
-    anim.setDuration(duration)
+    anim.setDuration(duration if theme.animations else 0)
     anim.setEasingCurve(QEasingCurve(QEasingCurve.Type.OutCubic))
     anim.valueChanged.connect(callback)
     return anim
@@ -259,6 +259,16 @@ class Segmented(QWidget):
     def _target(self):
         index = self._index()
         return 4 + sum(self.widths[:index]), self.widths[index]
+
+    def set_value(self, value: str) -> None:
+        """Select a value without emitting ``changed`` (used when refreshing)."""
+        if value not in [key for key, _text in self.items] or value == self.value:
+            return
+        self._from = self._current()
+        self.value = value
+        self._to = self._target()
+        self._t = 1.0
+        self.update()
 
     def _set_t(self, value) -> None:
         self._t = float(value)

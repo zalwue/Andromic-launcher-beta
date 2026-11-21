@@ -28,12 +28,23 @@ _PREFERRED = ("MiSans", "HarmonyOS Sans", "Segoe UI Variable Text", "Segoe UI", 
               "Helvetica Neue", "Inter", "Roboto", "Noto Sans", "DejaVu Sans")
 _MONO = ("Cascadia Mono", "Consolas", "Menlo", "DejaVu Sans Mono", "Courier New")
 
+# Appearance options controlled by the Customization page.
+animations = True
+density = "comfortable"
+corner_radius = 22
+font_scale = 100
+background = ""
 
-def set_theme(name: str, accent: str = "") -> None:
-    global current
+
+def set_theme(name: str, accent: str = "", custom: dict = None) -> None:
+    global current, animations, density, corner_radius, font_scale, background
+    custom = custom or {}
     current = name if name in PALETTES else "light"
+    if custom.get("theme") in PALETTES:
+        current = custom["theme"]
     palette = dict(PALETTES[current])
-    candidate = QColor(str(accent)) if accent else QColor()
+    accent_value = custom.get("accent_color") or accent
+    candidate = QColor(str(accent_value)) if accent_value else QColor()
     if candidate.isValid():
         palette["accent"] = candidate.name(QColor.NameFormat.HexRgb)
         palette["accent_hover"] = candidate.darker(112).name(QColor.NameFormat.HexRgb)
@@ -42,6 +53,24 @@ def set_theme(name: str, accent: str = "") -> None:
         else:
             soft = candidate.lighter(175)
         palette["accent_soft"] = soft.name(QColor.NameFormat.HexRgb)
+    try:
+        animations = bool(custom.get("animations", True))
+    except (TypeError, ValueError):
+        animations = True
+    density = "compact" if custom.get("density") == "compact" else "comfortable"
+    try:
+        corner_radius = min(32, max(8, int(custom.get("corner_radius", 22))))
+    except (TypeError, ValueError):
+        corner_radius = 22
+    try:
+        font_scale = min(125, max(85, int(custom.get("font_scale", 100))))
+    except (TypeError, ValueError):
+        font_scale = 100
+    background = ""
+    bg_candidate = QColor(str(custom.get("background") or "")) if custom.get("background") else QColor()
+    if bg_candidate.isValid():
+        background = bg_candidate.name(QColor.NameFormat.HexRgb)
+        palette["bg"] = background
     for key, value in palette.items():
         setattr(colors, key, value)
 
@@ -56,53 +85,59 @@ def init_fonts() -> QFont:
 
 def font(size: float = 10, bold: bool = False) -> QFont:
     f = QFont(_family)
-    f.setPointSizeF(float(size))
+    f.setPointSizeF(float(size) * (font_scale / 100.0))
     f.setBold(bold)
     return f
 
 
 def mono(size: float = 10) -> QFont:
     f = QFont(_mono)
-    f.setPointSizeF(float(size))
+    f.setPointSizeF(float(size) * (font_scale / 100.0))
     return f
 
 
 def stylesheet() -> str:
     c = colors
     chevron = icons.chevron_file(c.muted)
+    radius = corner_radius
+    field_radius = max(8, radius - 6)
+    compact = density == "compact"
+    field_pad = "5px 12px" if compact else "8px 16px"
+    field_height = "18px" if compact else "22px"
+    item_pad = "6px 10px" if compact else "10px 12px"
     return f"""
 QMainWindow, QDialog, #root {{ background: {c.bg}; }}
 QLabel {{ background: transparent; color: {c.text}; }}
 QLabel[muted="true"] {{ color: {c.muted}; }}
 QToolTip {{ background: {c.card}; color: {c.text}; border: 1px solid {c.border};
             padding: 6px 10px; border-radius: 8px; }}
-QFrame#card {{ background: {c.card}; border-radius: 22px; }}
+QFrame#card {{ background: {c.card}; border-radius: {radius}px; }}
 
 QLineEdit {{ background: {c.field}; color: {c.text}; border: 2px solid transparent;
-             border-radius: 16px; padding: 8px 16px; min-height: 22px;
+             border-radius: {field_radius}px; padding: {field_pad}; min-height: {field_height};
              selection-background-color: {c.accent}; selection-color: #FFFFFF; }}
 QLineEdit:focus {{ border: 2px solid {c.accent}; }}
 
 QComboBox {{ background: {c.field}; color: {c.text}; border: 2px solid transparent;
-             border-radius: 16px; padding: 8px 16px; min-height: 22px; }}
+             border-radius: {field_radius}px; padding: {field_pad}; min-height: {field_height}; }}
 QComboBox:hover {{ background: {c.field_hover}; }}
 QComboBox:on {{ border: 2px solid {c.accent}; }}
 QComboBox::drop-down {{ border: none; width: 34px; subcontrol-origin: padding;
                         subcontrol-position: center right; }}
 QComboBox::down-arrow {{ image: url({chevron}); width: 12px; height: 12px; }}
 QComboBox QAbstractItemView {{ background: {c.card}; color: {c.text};
-    border: 1px solid {c.border}; border-radius: 14px; padding: 6px; outline: 0; }}
+    border: 1px solid {c.border}; border-radius: {field_radius}px; padding: 6px; outline: 0; }}
 QComboBox QAbstractItemView::item {{ min-height: 30px; padding: 2px 10px; border-radius: 10px; }}
 QComboBox QAbstractItemView::item:selected, QComboBox QAbstractItemView::item:hover
     {{ background: {c.accent_soft}; color: {c.accent}; }}
 
 QListWidget {{ background: transparent; border: none; outline: 0; color: {c.text}; }}
-QListWidget::item {{ padding: 10px 12px; border-radius: 12px; }}
+QListWidget::item {{ padding: {item_pad}; border-radius: {max(6, radius - 10)}px; }}
 QListWidget::item:hover:!selected {{ background: {c.field}; }}
 QListWidget::item:selected {{ background: {c.accent_soft}; color: {c.accent}; }}
 
 QPlainTextEdit {{ background: {c.card}; color: {c.text}; border: none;
-                  border-radius: 22px; padding: 14px; }}
+                  border-radius: {radius}px; padding: 14px; }}
 
 QProgressBar {{ background: {c.track}; border: none; border-radius: 4px;
                 min-height: 8px; max-height: 8px; text-align: center; }}
@@ -115,7 +150,7 @@ QSlider::handle:horizontal {{ background: #FFFFFF; border: 2px solid {c.accent};
 
 QScrollArea, QAbstractScrollArea {{ background: transparent; border: none; }}
 QScrollArea > QWidget {{ background: transparent; }}
-#scrollInner {{ background: transparent; }}
+#scrollInner, #navHolder {{ background: transparent; }}
 QScrollBar:vertical {{ background: transparent; width: 10px; margin: 4px 2px; }}
 QScrollBar::handle:vertical {{ background: {c.track}; border-radius: 3px; min-height: 30px; }}
 QScrollBar::handle:vertical:hover {{ background: {c.muted}; }}

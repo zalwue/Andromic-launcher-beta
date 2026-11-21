@@ -18,7 +18,13 @@ Written in Python with a PySide6 (Qt) interface. Runs on Windows, Linux and macO
 - One-click performance preset (Sodium, Lithium, Iris and friends)
 - Separate instances with their own mods, packs and worlds
 - Server list with live status (players, latency, version) and one-click join
-- World backups, per-instance screenshot gallery and crash log analyser with conservative one-click fixes
+- World manager: rename, duplicate, export and import worlds, with safe NBT metadata editing
+- Backup manager: world or full-instance archives, manifests, verification, restore and retention
+- Per-instance screenshot gallery and crash log analyser with conservative one-click fixes
+- Diagnostics page: environment, folders, Java, configuration, backups and latest-log checks,
+  report export and safe repairs
+- Local co-op rooms with shareable invite codes and LAN discovery
+- Customization presets: accent colour, density, corner radius, font scale, animations and background
 - Prism Launcher / MultiMC ZIP import and Modrinth `.mrpack` import (drag and drop supported)
 - GitHub Releases update checks at startup and one-click download for the current OS
 - Custom Mimuix / HyperOS accent colour
@@ -44,6 +50,18 @@ build.bat
 ```
 
 The result is placed in `dist/`.
+
+## Tests
+
+```bash
+python -m unittest discover -s tests -v
+# or
+python -m pytest tests
+```
+
+The suite covers diagnostics, the world manager and NBT round-tripping, backups and
+safe restore, rooms and invite codes, appearance customisation, cross-platform path
+handling and a simulated source release ZIP.
 
 ## Project layout
 
@@ -82,7 +100,7 @@ Follow development news, sneak peeks, and new releases on our official Telegram 
 - **Telegram:** - [Our official channel](https://t.me/andromichannel)
 
 
-- **Telegram Discussed:** - [Our official Telegram Discussed](https://t.me/andromichannelofficialduscussed
+
 
 
 
@@ -118,3 +136,16 @@ GNU General Public License for more details.
 - Qt Widgets use Qt's built-in high-DPI handling. The launcher avoids capturing and
   compositing full-window screenshots during every navigation change to reduce UI work,
   especially on Retina displays.
+
+
+## Linux compatibility
+
+- The Linux build script uses baseline x86-64 compiler flags for native extensions
+  built from source. This avoids accidentally targeting the build machine with
+  `-march=native`; it does not change prebuilt binary wheels.
+- For wider glibc compatibility, build Linux releases on the oldest supported
+  distribution (Ubuntu 22.04 is the current compatibility target) rather than a
+  newer host. PyInstaller bundles Python packages but does not bundle glibc.
+- If a target machine reports `Illegal instruction`, inspect the executable and
+  bundled native libraries for unsupported CPU instructions. Compiler flags set
+  after installing prebuilt wheels cannot repair those already-compiled binaries.

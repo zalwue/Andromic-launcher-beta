@@ -43,6 +43,28 @@ def draw(painter: QPainter, name: str, rect: QRectF, color: QColor) -> None:
     elif name == "console":
         painter.drawPolyline(QPolygonF([QPointF(5, 8), QPointF(10, 12), QPointF(5, 16)]))
         painter.drawLine(QPointF(12, 17), QPointF(19, 17))
+    elif name == "worlds":
+        painter.drawEllipse(QPointF(12, 12), 8, 8)
+        painter.drawEllipse(QPointF(12, 12), 3.5, 8)
+        painter.drawLine(QPointF(4, 12), QPointF(20, 12))
+        painter.drawLine(QPointF(6, 7), QPointF(18, 7))
+        painter.drawLine(QPointF(6, 17), QPointF(18, 17))
+    elif name == "rooms":
+        painter.drawRoundedRect(QRectF(3, 6, 12, 9), 3, 3)
+        painter.drawPolyline(QPolygonF([QPointF(7, 15), QPointF(6, 19), QPointF(11, 15)]))
+        painter.drawRoundedRect(QRectF(13, 11, 8, 7), 3, 3)
+        painter.drawPolyline(QPolygonF([QPointF(18, 18), QPointF(19, 21), QPointF(15, 18)]))
+    elif name == "customization":
+        painter.drawEllipse(QPointF(12, 12), 8, 8)
+        painter.setBrush(color)
+        for x, y in ((8, 8), (16, 8), (8, 16), (16, 16)):
+            painter.drawEllipse(QPointF(x, y), 1.6, 1.6)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawEllipse(QPointF(12, 12), 2.2, 2.2)
+    elif name == "diagnostics":
+        painter.drawPolyline(QPolygonF([QPointF(3, 12), QPointF(7, 12), QPointF(9, 7),
+                                        QPointF(12, 18), QPointF(15, 10), QPointF(17, 12),
+                                        QPointF(21, 12)]))
     painter.restore()
 
 

@@ -4,12 +4,13 @@ import threading
 import traceback
 from pathlib import Path
 
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import QObject, Qt, Signal
 from PySide6.QtGui import QIcon
-from PySide6.QtWidgets import (QApplication, QHBoxLayout,
-                               QMainWindow, QMessageBox, QStackedWidget, QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QApplication, QFrame, QHBoxLayout, QMainWindow,
+                               QMessageBox, QScrollArea, QStackedWidget, QVBoxLayout, QWidget)
 
 from .. import APP_NAME, __version__
+from ..core import customization
 from ..core.config import load_config, save_config
 from ..core.instances import new_instance
 from ..core.paths import ROOT, ensure_dirs
@@ -21,16 +22,24 @@ from ..i18n import set_language, tr as _
 from . import theme
 from .pages.console import ConsolePage
 from .pages.content import ContentPage
+from .pages.customization import CustomizationPage
+from .pages.diagnostics import DiagnosticsPage
 from .pages.play import PlayPage
 from .pages.profiles import ProfilesPage
+from .pages.rooms import RoomsPage
 from .pages.servers import ServersPage
 from .pages.settings import SettingsPage
+from .pages.worlds import WorldsPage
 from .widgets import Button, label
 
 NAV = (("play", "Play", "play", PlayPage), ("content", "Content", "content", ContentPage),
        ("servers", "Servers", "servers", ServersPage),
        ("profiles", "Profiles", "profiles", ProfilesPage),
+       ("worlds", "Worlds", "worlds", WorldsPage),
+       ("rooms", "Rooms", "rooms", RoomsPage),
        ("settings", "Settings", "settings", SettingsPage),
+       ("customization", "Customization", "customization", CustomizationPage),
+       ("diagnostics", "Diagnostics", "diagnostics", DiagnosticsPage),
        ("console", "Console", "console", ConsolePage))
 
 
@@ -76,26 +85,43 @@ class MainWindow(QMainWindow):
         column.setSpacing(4)
         column.addWidget(label("Andromic", 22, bold=True))
         column.addWidget(label("Launcher", 10, muted=True))
-        column.addSpacing(22)
+        column.addSpacing(18)
 
+        nav_scroll = QScrollArea()
+        nav_scroll.setWidgetResizable(True)
+        nav_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        nav_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        nav_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        nav_holder = QWidget()
+        nav_holder.setObjectName("navHolder")
+        nav_column = QVBoxLayout(nav_holder)
+        nav_column.setContentsMargins(0, 0, 2, 0)
+        nav_column.setSpacing(4)
         self.stack = QStackedWidget()
         app.pages, self.nav = {}, {}
         for key, title, icon, page_class in NAV:
             button = Button(_(title), "nav", 44, icon=icon, size=11)
             button.clicked.connect(lambda _c=False, k=key: app.show(k))
-            column.addWidget(button)
+            nav_column.addWidget(button)
             self.nav[key] = button
             page = page_class(app)
             app.pages[key] = page
             self.stack.addWidget(page.frame)
-        column.addStretch()
+        nav_column.addStretch()
+        nav_scroll.setWidget(nav_holder)
+        column.addWidget(nav_scroll, 1)
         folder = Button(_("Data folder"), "ghost", 36, anchor="left")
         folder.clicked.connect(lambda _c=False: open_path(ROOT))
         column.addWidget(folder)
         column.addWidget(label(f"v{__version__}", 9, muted=True))
 
-        layout.addWidget(side)
-        layout.addWidget(self.stack, 1)
+        sidebar_position = app.custom.get("sidebar_position", "left")
+        if sidebar_position == "right":
+            layout.addWidget(self.stack, 1)
+            layout.addWidget(side)
+        else:
+            layout.addWidget(side)
+            layout.addWidget(self.stack, 1)
         self.setCentralWidget(root)
 
     def show_page(self, key):
@@ -116,7 +142,8 @@ class App:
         ensure_dirs()
         self.cfg = load_config()
         set_language(self.cfg["lang"])
-        theme.set_theme(self.cfg["theme"], self.cfg.get("accent_color", ""))
+        self.custom = customization.from_config(self.cfg)
+        theme.set_theme(self.custom["theme"], self.custom["accent_color"], self.custom)
         self.qt = QApplication.instance() or QApplication(sys.argv)
         self.qt.setApplicationName("Andromic")
         self.qt.setWindowIcon(_get_icon())
@@ -247,7 +274,8 @@ class App:
     def rebuild(self):
         self.save()
         set_language(self.cfg["lang"])
-        theme.set_theme(self.cfg["theme"], self.cfg.get("accent_color", ""))
+        self.custom = customization.from_config(self.cfg)
+        theme.set_theme(self.custom["theme"], self.custom["accent_color"], self.custom)
         self.qt.setStyleSheet(theme.stylesheet())
         self.window.build()
         self.show(self.current_page)
