@@ -4,10 +4,10 @@ import subprocess
 from collections import deque
 from typing import Callable, List, Optional
 
-from . import accounts, optifine
+from . import accounts, ely, optifine
 from .assets import install_assets, logging_argument
 from .command import build_command
-from .config import sanitize_settings
+from .config import sanitize_settings, save_config
 from .instances import backup_worlds, instance_dir
 from .java import ensure_java
 from .libraries import extract_natives, install_libraries
@@ -61,17 +61,24 @@ class GameLauncher:
             backup_worlds(inst)
         skin = accounts.skin_file(account)
         pack = game_dir / "resourcepacks" / accounts.SKIN_PACK_NAME
-        if skin.exists():
+        has_local_skin = account.get("type") != "ely" and skin.exists()
+        if has_local_skin:
             accounts.build_skin_pack(skin.read_bytes(), inst["mc"], pack)
         elif pack.exists():
             pack.unlink()
-        apply_settings(game_dir, settings, skin.exists())
+        apply_settings(game_dir, settings, has_local_skin)
 
     def run(self, cfg: dict, inst: dict, account: dict,
             on_java: Optional[Callable[[int], None]] = None,
             on_start: Optional[Callable[[], None]] = None) -> int:
         rep = self.rep
         settings = sanitize_settings(cfg)
+        authlib_path = ""
+        if account.get("type") == "ely":
+            rep.status("Refreshing Ely.by session")
+            ely.refresh_account(account)
+            save_config(cfg)
+            authlib_path = str(ely.ensure_authlib_injector())
         base = ensure_vanilla(self.manifest, inst["mc"], rep)
         java, major = ensure_java(base, settings["java_path"], rep)
         if on_java:
@@ -97,7 +104,8 @@ class GameLauncher:
         nick = accounts.clean_nick(account["nick"])
         command = build_command(
             version, version_id, java, settings, nick, game_dir, entries, natives_dir,
-            asset_index, inst.get("server", "").strip(), [log_arg] if log_arg else [])
+            asset_index, inst.get("server", "").strip(), [log_arg] if log_arg else [],
+            account=account, authlib_injector=authlib_path)
 
         rep.log("-" * 48)
         rep.log(f"Launching {version_id} as {nick} (Java {major}, {settings['ram']} MB)")

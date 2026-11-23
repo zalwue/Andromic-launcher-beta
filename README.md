@@ -149,3 +149,23 @@ GNU General Public License for more details.
 - If a target machine reports `Illegal instruction`, inspect the executable and
   bundled native libraries for unsupported CPU instructions. Compiler flags set
   after installing prebuilt wheels cannot repair those already-compiled binaries.
+
+
+## Andromic 2.1b CPU compatibility policy
+
+- PySide6 is pinned to 6.9.3 for reproducible builds while the Qt 6.10 Linux
+  CPU-baseline change is being avoided and validated.
+- Linux CI builds on Ubuntu 22.04 and runs a QtCore import smoke test under
+  QEMU with SSE4.2 and POPCNT masked. This is a compatibility regression check,
+  not a substitute for testing on the actual target computer.
+- Distributable native code must not be compiled with `-march=native` or other
+  host-CPU auto-detection. The generic x86-64 baseline is the default target.
+- Compiler flags do not alter prebuilt wheels. Every bundled native wheel must
+  be pinned and audited independently.
+
+
+## Ely.by accounts
+
+Andromic supports direct Ely.by Yggdrasil login using the official `POST /auth/authenticate` and `POST /auth/refresh` endpoints. The password is used only for the sign-in request and is not stored. The returned access token and client token are saved in the local launcher configuration so the game can be launched without a separate Andromic account or server. The first Ely.by launch downloads the official authlib-injector release from GitHub and starts Minecraft with `-javaagent:<path>=ely.by`.
+
+The local `config.json` contains the Ely.by access token. Treat this file as sensitive and do not share it. Removing the Ely.by profile from Andromic does not sign out or revoke the token at Ely.by; revoke it from your Ely.by account if needed.

@@ -1,5 +1,6 @@
 """Persistent launcher configuration."""
 import json
+import os
 
 from .accounts import new_account
 from .paths import CONFIG_FILE
@@ -54,6 +55,9 @@ def save_config(cfg: dict) -> None:
     try:
         CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
         CONFIG_FILE.write_text(json.dumps(cfg, indent=2, ensure_ascii=False), "utf-8")
+        # Ely.by access tokens live in config.json; keep it private on POSIX systems.
+        if os.name != "nt":
+            CONFIG_FILE.chmod(0o600)
     except OSError:
         pass
 

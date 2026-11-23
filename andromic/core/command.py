@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import Iterable, List
+from typing import Iterable, List, Optional
 
 from .. import __version__
 from .accounts import offline_uuid
@@ -42,22 +42,26 @@ def _dedupe(items: Iterable[str]) -> List[str]:
 
 def build_command(version: dict, version_id: str, java: str, settings: dict, nick: str,
                   game_dir, classpath: List[str], natives_dir, asset_index: str,
-                  server: str = "", extra_jvm: List[str] = ()) -> List[str]:
+                  server: str = "", extra_jvm: List[str] = (),
+                  account: Optional[dict] = None, authlib_injector: str = "") -> List[str]:
     classpath_str = CLASSPATH_SEP.join(_dedupe(classpath))
     width = str(settings.get("width", "1280"))
     height = str(settings.get("height", "720"))
+    is_ely = bool(account and account.get("type") == "ely")
+    profile_uuid = (str(account.get("uuid", "")).replace("-", "") if is_ely
+                    else offline_uuid(nick).replace("-", ""))
     mapping = {
-        "auth_player_name": nick,
+        "auth_player_name": str(account.get("nick", nick)) if is_ely else nick,
         "version_name": version_id,
         "game_directory": str(game_dir),
         "assets_root": str(ASSETS),
         "assets_index_name": asset_index,
-        "auth_uuid": offline_uuid(nick).replace("-", ""),
-        "auth_access_token": "0",
+        "auth_uuid": profile_uuid,
+        "auth_access_token": str(account.get("accessToken", "")) if is_ely else "0",
         "auth_session": "0",
         "clientid": "0",
         "auth_xuid": "0",
-        "user_type": "legacy",
+        "user_type": "mojang" if is_ely else "legacy",
         "version_type": version.get("type", "release"),
         "user_properties": "{}",
         "natives_directory": str(natives_dir),
@@ -85,6 +89,11 @@ def build_command(version: dict, version_id: str, java: str, settings: dict, nic
     else:
         jvm = [f"-Djava.library.path={natives_dir}", "-cp", classpath_str]
         game = expand_args(version.get("minecraftArguments", "").split(), features, mapping)
+
+    if is_ely:
+        if not authlib_injector:
+            raise ValueError("Для аккаунта Ely.by не указан authlib-injector.")
+        jvm.insert(0, f"-javaagent:{authlib_injector}=ely.by")
 
     if settings.get("fullscreen"):
         game.append("--fullscreen")

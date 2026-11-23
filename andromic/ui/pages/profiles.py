@@ -1,10 +1,11 @@
 import random
+import uuid
 
 from PySide6.QtCore import QTimer, Qt
 from PySide6.QtWidgets import (QFileDialog, QHBoxLayout, QLabel, QListWidget, QVBoxLayout,
-                               QWidget)
+                               QWidget, QLineEdit)
 
-from ...core import accounts
+from ...core import accounts, ely
 from ...i18n import tr as _
 from ..avatars import head_pixmap
 from ..widgets import Button, Card, Field, ToggleRow, label, page_title
@@ -74,6 +75,25 @@ class ProfilesPage:
         self.slim = ToggleRow(_("Slim arms (Alex model)"))
         right.lay.addSpacing(8)
         right.lay.addWidget(self.slim)
+
+        right.lay.addSpacing(12)
+        right.lay.addWidget(label(_("Ely.by account"), 12, bold=True))
+        right.lay.addWidget(label(_("Sign in with your existing Ely.by username or e-mail. Password is not saved."),
+                                  9, muted=True, wrap=True))
+        self.ely_login = Field()
+        self.ely_login.setPlaceholderText(_("Ely.by username or e-mail"))
+        self.ely_password = Field()
+        self.ely_password.setPlaceholderText(_("Ely.by password"))
+        self.ely_password.setEchoMode(QLineEdit.EchoMode.Password)
+        self.ely_totp = Field()
+        self.ely_totp.setPlaceholderText(_("2FA code (if enabled)"))
+        self.ely_totp.setEchoMode(QLineEdit.EchoMode.Password)
+        right.lay.addWidget(self.ely_login)
+        right.lay.addWidget(self.ely_password)
+        right.lay.addWidget(self.ely_totp)
+        self.ely_button = Button(_("Sign in with Ely.by"), "primary", 40)
+        self.ely_button.clicked.connect(lambda _c=False: self._ely_login())
+        right.lay.addWidget(self.ely_button)
         right.lay.addStretch()
 
         actions = QHBoxLayout()
@@ -101,13 +121,16 @@ class ProfilesPage:
         self.listbox.clear()
         for index, acc in enumerate(accs):
             marker = "●  " if acc["id"] == self.app.cfg["account"] else "    "
-            self.listbox.addItem(marker + acc["nick"])
+            label_text = acc["nick"] + ("  ·  Ely.by" if acc.get("type") == "ely" else "")
+            self.listbox.addItem(marker + label_text)
             if acc["id"] == self.edit_id:
                 self.listbox.setCurrentRow(index)
         self.listbox.blockSignals(False)
         acc = self._account()
         self.nick.setText(acc["nick"])
-        self.slim.setChecked(acc.get("slim", False))
+        is_ely = acc.get("type") == "ely"
+        self.nick.setEnabled(not is_ely)
+        self.slim.setEnabled(not is_ely)
         self._update_avatar()
 
     def _update_avatar(self):
@@ -151,10 +174,52 @@ class ProfilesPage:
             self.app.run_async(lambda: accounts.fetch_mojang_skin(name),
                                lambda result: self._store_skin(result[0], result[1]))
 
+    def _ely_login(self):
+        username = self.ely_login.text().strip()
+        password = self.ely_password.text()
+        totp = self.ely_totp.text().strip()
+        if not username or not password:
+            self.app.warn(_("Enter your Ely.by login and password."))
+            return
+        client_token = self.app.cfg.get("ely_client_token") or uuid.uuid4().hex
+        self.ely_button.setEnabled(False)
+        self.ely_button.setText(_("Signing in…"))
+
+        def done(account):
+            self.ely_password.clear()
+            self.ely_totp.clear()
+            signed_account = account
+            existing = next((item for item in self.app.cfg["accounts"]
+                             if item.get("type") == "ely" and item.get("uuid") == signed_account["uuid"]), None)
+            if existing:
+                existing.update(signed_account)
+                signed_account = existing
+            else:
+                self.app.cfg["accounts"].append(signed_account)
+            self.app.cfg["ely_client_token"] = client_token
+            self.app.cfg["account"] = signed_account["id"]
+            self.edit_id = signed_account["id"]
+            self.app.save()
+            self.ely_button.setEnabled(True)
+            self.ely_button.setText(_("Sign in with Ely.by"))
+            self.refresh()
+            self.app.info(_("Signed in to Ely.by as {name}.").format(name=signed_account["nick"]))
+            self.app.refresh()
+
+        def failed(_exc):
+            self.ely_password.clear()
+            self.ely_button.setEnabled(True)
+            self.ely_button.setText(_("Sign in with Ely.by"))
+
+        self.app.run_async(
+            lambda: ely.authenticate(username, password, client_token=client_token, totp=totp),
+            done, failed)
+
     def _save(self):
         acc = self._account()
-        acc["nick"] = accounts.clean_nick(self.nick.text())
-        acc["slim"] = self.slim.isChecked()
+        if acc.get("type") != "ely":
+            acc["nick"] = accounts.clean_nick(self.nick.text())
+            acc["slim"] = self.slim.isChecked()
         self.app.cfg["account"] = acc["id"]
         self.app.save()
         self.app.refresh()

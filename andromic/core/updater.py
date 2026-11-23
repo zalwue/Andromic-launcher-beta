@@ -18,8 +18,22 @@ USER_AGENT = f"AndromicLauncher/{__version__}"
 
 
 def _version_tuple(value: str):
-    numbers = [int(part) for part in re.findall(r"\d+", str(value).lstrip("vV"))[:4]]
-    return tuple((numbers + [0, 0, 0, 0])[:4])
+    """Return a comparable key that orders prereleases before final releases."""
+    text = str(value or "").strip().lstrip("vV").lower()
+    match = re.match(
+        r"^(\d+(?:\.\d+)*)(?:[-.]?(alpha|a|beta|b|rc)(?:[-.]?(\d+))?)?",
+        text,
+    )
+    if not match:
+        numbers = [int(part) for part in re.findall(r"\d+", text)[:4]]
+        release = tuple(numbers or [0])
+        return release, 3, 0
+    release = [int(part) for part in match.group(1).split(".")]
+    while len(release) > 1 and release[-1] == 0:
+        release.pop()
+    label = match.group(2)
+    pre_rank = {"a": 0, "alpha": 0, "b": 1, "beta": 1, "rc": 2}
+    return tuple(release), pre_rank[label] if label else 3, int(match.group(3) or 0)
 
 
 def is_newer(remote: str, local: str = __version__) -> bool:

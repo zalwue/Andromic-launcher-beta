@@ -21,6 +21,13 @@ class UpdaterTests(unittest.TestCase):
         self.assertTrue(updater.is_newer("v1.2.0", "1.1.9"))
         self.assertFalse(updater.is_newer("v1.0.0", "1.0"))
 
+    def test_prerelease_ordering(self):
+        self.assertTrue(updater.is_newer("v2.1.0", "2.1.0b1"))
+        self.assertTrue(updater.is_newer("v2.1.0b2", "2.1.0b1"))
+        self.assertFalse(updater.is_newer("v2.1.0b1", "2.1.0"))
+        self.assertFalse(updater.is_newer("v2.1.0b1", "2.1.0b2"))
+        self.assertFalse(updater.is_newer("v2.1.0b1", "2.1b1"))
+
     def test_selects_windows_executable(self):
         assets = [
             {"name": "Andromic-v2-linux.zip"},
@@ -651,16 +658,105 @@ class PackagingTests(unittest.TestCase):
             self.assertIn("main.py", names)
             self.assertIn("assets/icon.png", names)
 
-    def test_workflow_is_optional_and_never_modified_by_source_tests(self):
+    def test_qt_cpu_compatibility_policy_is_pinned(self):
+        root = Path(__file__).resolve().parents[1]
+        requirements = (root / "requirements.txt").read_text("utf-8")
+        project = (root / "pyproject.toml").read_text("utf-8")
+        version = (root / "andromic" / "__init__.py").read_text("utf-8")
+        self.assertIn("PySide6==6.9.3", requirements)
+        self.assertIn('dependencies = ["PySide6==6.9.3"]', project)
+        self.assertIn('2.1.0b1', version)
+        smoke = root / "tools" / "qt_cpu_smoke.py"
+        self.assertTrue(smoke.is_file())
+        py_compile.compile(str(smoke), doraise=True)
+
+    def test_workflow_runs_legacy_cpu_qt_smoke_test(self):
         root = Path(__file__).resolve().parents[1]
         workflow_path = root / ".github" / "workflows" / "build.yml"
-        # Some source ZIPs intentionally omit repository metadata. The launcher
-        # tests must not require, generate, or modify the user's GitHub workflow.
-        if not workflow_path.is_file():
-            self.skipTest("GitHub Actions workflow is maintained in the user's repository")
-        original = workflow_path.read_bytes()
-        self.assertTrue(original, "Existing workflow must not be empty")
-        self.assertEqual(workflow_path.read_bytes(), original)
+        self.assertTrue(workflow_path.is_file(), "GitHub Actions workflow must be bundled")
+        workflow = workflow_path.read_text("utf-8")
+        self.assertIn("ubuntu-22.04", workflow)
+        self.assertIn("qemu-user", workflow)
+        self.assertIn("qemu-x86_64 -cpu Nehalem,-sse4.2,-popcnt", workflow)
+        self.assertIn("tools/qt_cpu_smoke.py", workflow)
+
+
+class ElyIntegrationTests(unittest.TestCase):
+    def test_authenticate_builds_yggdrasil_account_without_saving_password(self):
+        from andromic.core import ely
+        response = {
+            "accessToken": "token-value",
+            "clientToken": "client-value",
+            "selectedProfile": {"id": "0123456789abcdef0123456789abcdef", "name": "ElyPlayer"},
+        }
+        with patch.object(ely, "_post", return_value=response) as post:
+            account = ely.authenticate("mail@example.test", "secret", "client-value", "123456")
+        self.assertEqual(post.call_args.args[0], ely.AUTHENTICATE_URL)
+        payload = post.call_args.args[1]
+        self.assertEqual(payload["password"], "secret:123456")
+        self.assertEqual(account["type"], "ely")
+        self.assertEqual(account["uuid"], "0123456789abcdef0123456789abcdef")
+        self.assertNotIn("password", account)
+
+    def test_authenticate_maps_two_factor_error(self):
+        from andromic.core.ely import ElyAuthError
+        error = ElyAuthError("Account protected with two factor auth.", status=401)
+        self.assertTrue(error.needs_2fa)
+
+    def test_command_uses_ely_credentials_and_agent(self):
+        version = {"type": "release", "mainClass": "Main", "arguments": {
+            "jvm": ["-cp", "${classpath}"], "game": ["--username", "${auth_player_name}",
+                                                           "--uuid", "${auth_uuid}",
+                                                           "--token", "${auth_access_token}", "--type", "${user_type}"]}}
+        settings = {"width": "1280", "height": "720", "ram": 2048,
+                    "optimize_jvm": False, "jvm_args": "", "fullscreen": False}
+        account = {"id": "ely-1", "type": "ely", "nick": "ElyPlayer",
+                   "uuid": "0123456789abcdef0123456789abcdef", "accessToken": "secret-token"}
+        result = command.build_command(version, "1.21.4", "java", settings, "ignored",
+                                        "/tmp/game", ["client.jar"], "/tmp/natives", "5",
+                                        account=account, authlib_injector="/tmp/authlib.jar")
+        self.assertIn("-javaagent:/tmp/authlib.jar=ely.by", result)
+        self.assertIn("--username", result)
+        self.assertIn("ElyPlayer", result)
+        self.assertIn("0123456789abcdef0123456789abcdef", result)
+        self.assertIn("secret-token", result)
+        self.assertIn("mojang", result)
+
+    def test_post_json_encodes_json_payload(self):
+        from andromic.core import net
+        class Response:
+            def __enter__(self): return self
+            def __exit__(self, *_args): return False
+            def read(self): return b'{"ok":true}'
+        with patch.object(net.urllib.request, "urlopen", return_value=Response()) as opener:
+            result = net.post_json("https://example.test", {"hello": "world"})
+        self.assertEqual(result, {"ok": True})
+        request = opener.call_args.args[0]
+        self.assertEqual(request.get_method(), "POST")
+        self.assertEqual(request.data, b'{"hello": "world"}')
+
+    def test_refresh_updates_token_and_keeps_client_token(self):
+        from andromic.core import ely
+        account = {"id": "ely-old", "type": "ely", "nick": "OldName",
+                   "uuid": "0123456789abcdef0123456789abcdef",
+                   "accessToken": "old-token", "clientToken": "stable-client"}
+        response = {"accessToken": "new-token", "clientToken": "stable-client",
+                    "selectedProfile": {"id": "0123456789abcdef0123456789abcdef", "name": "NewName"}}
+        with patch.object(ely, "_post", return_value=response) as post:
+            ely.refresh_account(account)
+        self.assertEqual(post.call_args.args[0], ely.REFRESH_URL)
+        self.assertEqual(post.call_args.args[1]["clientToken"], "stable-client")
+        self.assertEqual(account["accessToken"], "new-token")
+        self.assertEqual(account["nick"], "NewName")
+
+    def test_config_file_is_private_on_posix(self):
+        from andromic.core import config
+        with tempfile.TemporaryDirectory() as temp:
+            target = Path(temp) / "config.json"
+            with patch.object(config, "CONFIG_FILE", target):
+                config.save_config({"accounts": [{"type": "ely", "accessToken": "token"}]})
+            if os.name != "nt":
+                self.assertEqual(target.stat().st_mode & 0o777, 0o600)
 
 
 if __name__ == "__main__":

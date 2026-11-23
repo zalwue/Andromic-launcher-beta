@@ -22,6 +22,21 @@ def get_json(url: str):
     return json.loads(http_get(url).decode("utf-8"))
 
 
+def post_json(url: str, payload: dict, timeout: int = 30):
+    """POST a JSON document and decode the JSON response."""
+    body = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(
+        url, data=body,
+        headers={**HEADERS, "Content-Type": "application/json", "Accept": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=timeout) as response:
+        raw = response.read()
+    if not raw:
+        return {}
+    return json.loads(raw.decode("utf-8"))
+
+
 def download(url, dest, sha1=None, size=None, retries=3):
     """Download a file unless it already exists with the expected size."""
     dest = Path(dest)
