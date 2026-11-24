@@ -5,7 +5,7 @@ import traceback
 from pathlib import Path
 
 from PySide6.QtCore import QObject, Qt, Signal
-from PySide6.QtGui import QIcon
+from PySide6.QtGui import QColor, QIcon, QPainter, QPixmap
 from PySide6.QtWidgets import (QApplication, QFrame, QHBoxLayout, QMainWindow,
                                QMessageBox, QScrollArea, QStackedWidget, QVBoxLayout, QWidget)
 
@@ -49,6 +49,37 @@ def _get_icon() -> QIcon:
     return QIcon(str(icon_file)) if icon_file.exists() else QIcon()
 
 
+
+class WallpaperWidget(QWidget):
+    """Softened wallpaper backdrop for translucent glass panels."""
+
+    def __init__(self, path="", parent=None):
+        super().__init__(parent)
+        self._path = str(path or "")
+        self._pixmap = QPixmap(self._path) if self._path and Path(self._path).is_file() else QPixmap()
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
+        if not self._pixmap.isNull():
+            size = self.size()
+            small = self._pixmap.scaled(
+                max(1, size.width() // 16), max(1, size.height() // 16),
+                Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                Qt.TransformationMode.SmoothTransformation)
+            softened = small.scaled(
+                size, Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                Qt.TransformationMode.SmoothTransformation)
+            x = max(0, (softened.width() - size.width()) // 2)
+            y = max(0, (softened.height() - size.height()) // 2)
+            source = softened.rect().adjusted(x, y, -x, -y)
+            painter.drawPixmap(self.rect(), softened, source)
+            painter.fillRect(self.rect(), QColor(7, 13, 27, 88))
+        else:
+            painter.fillRect(self.rect(), QColor(theme.colors.bg))
+        painter.end()
+
+
 class Bridge(QObject):
     """Runs callables on the GUI thread; safe to trigger from worker threads."""
 
@@ -72,7 +103,7 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(1000, 680)
     def build(self):
         app = self.app
-        root = QWidget()
+        root = WallpaperWidget(app.custom.get("wallpaper_path", ""))
         root.setObjectName("root")
         layout = QHBoxLayout(root)
         layout.setContentsMargins(20, 20, 20, 20)
@@ -122,6 +153,7 @@ class MainWindow(QMainWindow):
         else:
             layout.addWidget(side)
             layout.addWidget(self.stack, 1)
+        self.root_widget = root
         self.setCentralWidget(root)
 
     def show_page(self, key):

@@ -581,7 +581,16 @@ class CustomizationTests(unittest.TestCase):
         self.assertEqual(updated["font_scale"], 85)
         self.assertFalse(updated["animations"])
         self.assertEqual(updated["sidebar_position"], "right")
+        self.assertTrue(updated["frosted_glass"])
+        self.assertEqual(updated["wallpaper_path"], "")
         self.assertEqual(cfg["theme"], "light")
+
+        glass = customization.save_customization(cfg, {
+            "preset": "midnight", "theme": "dark", "accent_color": "#7AA2FF",
+            "wallpaper_path": "/tmp/andromic-wallpaper.jpg", "frosted_glass": False,
+        })
+        self.assertEqual(glass["wallpaper_path"], "/tmp/andromic-wallpaper.jpg")
+        self.assertFalse(glass["frosted_glass"])
 
         text = customization.export_theme(updated)
         restored = customization.import_theme(text)

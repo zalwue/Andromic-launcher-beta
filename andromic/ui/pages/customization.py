@@ -54,6 +54,17 @@ class CustomizationPage:
         background_row.addWidget(self.background_button)
         background_row.addWidget(clear)
         presets.lay.addLayout(background_row)
+        presets.lay.addWidget(label(_("Wallpaper image"), 10, muted=True))
+        wallpaper_row = QHBoxLayout()
+        self.wallpaper = Field("", placeholder=_("Choose a wallpaper image"))
+        self.wallpaper_button = Button(_("Browse"), "tonal", 36)
+        self.wallpaper_button.clicked.connect(lambda _c=False: self._choose_wallpaper())
+        clear_wallpaper = Button(_("Clear"), height=36)
+        clear_wallpaper.clicked.connect(lambda _c=False: self.wallpaper.clear())
+        wallpaper_row.addWidget(self.wallpaper, 1)
+        wallpaper_row.addWidget(self.wallpaper_button)
+        wallpaper_row.addWidget(clear_wallpaper)
+        presets.lay.addLayout(wallpaper_row)
         presets.lay.addStretch()
         columns.addWidget(presets, 1)
 
@@ -68,6 +79,9 @@ class CustomizationPage:
         options.lay.addWidget(self.density, 0, Qt.AlignmentFlag.AlignLeft)
         self.animations = ToggleRow(_("Animations"), True)
         options.lay.addWidget(self.animations)
+        self.glass = ToggleRow(_("Frosted Glass"), True,
+                               _("Let the wallpaper show through blurred translucent panels"))
+        options.lay.addWidget(self.glass)
         options.lay.addWidget(label(_("Corner radius"), 10, muted=True))
         self.radius = SliderRow(8, 32, 2, 22, lambda value: f"{value} px")
         options.lay.addWidget(self.radius)
@@ -123,6 +137,8 @@ class CustomizationPage:
         self.selected_theme = custom["theme"]
         self.accent.setText(custom["accent_color"])
         self.background.setText(custom.get("background", ""))
+        self.wallpaper.setText(custom.get("wallpaper_path", ""))
+        self.glass.setChecked(bool(custom.get("frosted_glass", True)))
         self.radius.slider.setValue(int(custom["corner_radius"]) // self.radius.step)
         self.font_scale.slider.setValue(int(custom["font_scale"]) // self.font_scale.step)
         self.animations.setChecked(bool(custom["animations"]))
@@ -141,12 +157,21 @@ class CustomizationPage:
         if color.isValid():
             self.background.setText(color.name(QColor.NameFormat.HexRgb).upper())
 
+    def _choose_wallpaper(self):
+        path, _filter = QFileDialog.getOpenFileName(
+            self.frame, _("Choose wallpaper"), "",
+            "Images (*.png *.jpg *.jpeg *.webp *.bmp)")
+        if path:
+            self.wallpaper.setText(path)
+
     def _data(self):
         return {
             "preset": self._preset_id(),
             "theme": self.selected_theme,
             "accent_color": self.accent.text().strip(),
             "background": self.background.text().strip(),
+            "wallpaper_path": self.wallpaper.text().strip(),
+            "frosted_glass": self.glass.isChecked(),
             "density": "compact" if self.density.value == "compact" else "comfortable",
             "sidebar_position": self.sidebar_position.value,
             "animations": self.animations.isChecked(),

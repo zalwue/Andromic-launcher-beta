@@ -1,0 +1,208 @@
+name: Build Andromic Launcher
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build (${{ matrix.os_name }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os_name: Windows
+            runner: windows-latest
+            bin_prefix: windows
+            add_data: "assets;assets"
+            icon_flag: "--icon=assets/icon.ico"
+          - os_name: Linux
+            runner: ubuntu-22.04
+            bin_prefix: linux
+            add_data: "assets:assets"
+            icon_flag: ""
+          - os_name: macOS
+            runner: macos-latest
+            bin_prefix: macos
+            add_data: "assets:assets"
+            icon_flag: "--icon=assets/icon.png"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set version
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            echo "VERSION=${GITHUB_REF_NAME}" >> "$GITHUB_ENV"
+          else
+            echo "VERSION=dev" >> "$GITHUB_ENV"
+          fi
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Linux system dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y binutils zip libxcb-cursor0 libxkbcommon-x11-0 libegl1 libgl1 qemu-user
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt pyinstaller pillow
+
+      # The source ZIP intentionally omits binary icon assets. Generate build-time
+      # fallback icons so Windows/macOS/Linux packages still have an application icon.
+      - name: Prepare build icon assets
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from PIL import Image, ImageDraw
+
+          assets = Path("assets")
+          assets.mkdir(exist_ok=True)
+          png = assets / "icon.png"
+          if not png.exists():
+              image = Image.new("RGBA", (512, 512), (12, 20, 42, 255))
+              draw = ImageDraw.Draw(image)
+              draw.rounded_rectangle((28, 28, 484, 484), radius=112,
+                                     fill=(20, 43, 82, 255),
+                                     outline=(91, 190, 255, 255), width=14)
+              draw.polygon([(130, 365), (250, 105), (382, 365), (315, 365),
+                            (250, 230), (195, 365)],
+                           fill=(115, 213, 255, 255))
+              image.save(png)
+          ico = assets / "icon.ico"
+          if not ico.exists():
+              Image.open(png).save(ico, format="ICO",
+                                   sizes=[(16, 16), (32, 32), (48, 48),
+                                          (64, 64), (128, 128), (256, 256)])
+          PY
+
+      - name: Verify Qt on a legacy x86-64 CPU model
+        if: runner.os == 'Linux'
+        run: |
+          qemu-x86_64 -cpu Nehalem,-sse4.2,-popcnt -L / "$(command -v python)" tools/qt_cpu_smoke.py
+
+      - name: Build executable with PyInstaller
+        run: >
+          pyinstaller --noconfirm --onefile --windowed
+          --name "Andromic-launcher-${{ env.VERSION }}-${{ matrix.bin_prefix }}"
+          ${{ matrix.icon_flag }}
+          --add-data "${{ matrix.add_data }}"
+          --hidden-import PySide6.QtCore
+          --hidden-import PySide6.QtGui
+          --hidden-import PySide6.QtWidgets
+          --collect-submodules andromic
+          --collect-all PySide6
+          main.py
+
+      - name: Package Linux (.zip and .deb)
+        if: runner.os == 'Linux'
+        run: |
+          cd dist
+          zip "Andromic-launcher-${VERSION}-linux.zip" "Andromic-launcher-${VERSION}-linux"
+          cd ..
+          DEB_VER="${VERSION#v}"
+          DEB_VER="${DEB_VER//-/+}"
+          if [[ ! "$DEB_VER" =~ ^[0-9] ]]; then DEB_VER="0.0.0+${DEB_VER}"; fi
+          mkdir -p deb_pkg/DEBIAN deb_pkg/usr/local/bin deb_pkg/usr/share/applications deb_pkg/usr/share/icons/hicolor/256x256/apps
+          cp "dist/Andromic-launcher-${VERSION}-linux" deb_pkg/usr/local/bin/andromic-launcher
+          chmod 755 deb_pkg/usr/local/bin/andromic-launcher
+          cp assets/icon.png deb_pkg/usr/share/icons/hicolor/256x256/apps/andromic-launcher.png
+          printf "Package: andromic-launcher\nVersion: %s\nSection: games\nPriority: optional\nArchitecture: amd64\nMaintainer: zalwue\nDescription: Lightweight HyperOS-inspired Minecraft Launcher\n" "$DEB_VER" > deb_pkg/DEBIAN/control
+          printf "[Desktop Entry]\nName=Andromic Launcher\nExec=/usr/local/bin/andromic-launcher\nIcon=andromic-launcher\nType=Application\nCategories=Game;\n" > deb_pkg/usr/share/applications/andromic-launcher.desktop
+          dpkg-deb --build deb_pkg "dist/Andromic-launcher-${VERSION}-linux.deb"
+
+      - name: Package Linux AppImage
+        if: runner.os == 'Linux'
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: '1'
+        run: |
+          set -euo pipefail
+          APP=AndromicLauncher.AppDir
+          mkdir -p "$APP/usr/bin" "$APP/usr/share/applications" "$APP/usr/share/icons/hicolor/256x256/apps"
+          cp "dist/Andromic-launcher-${VERSION}-linux" "$APP/usr/bin/andromic-launcher"
+          cp assets/icon.png "$APP/usr/share/icons/hicolor/256x256/apps/andromic-launcher.png"
+          cp assets/icon.png "$APP/andromic-launcher.png"
+          cat > "$APP/andromic-launcher.desktop" <<'DESKTOP'
+          [Desktop Entry]
+          Name=Andromic Launcher
+          Comment=Minecraft launcher
+          Exec=andromic-launcher
+          Icon=andromic-launcher
+          Type=Application
+          Categories=Game;Utility;
+          Terminal=false
+          DESKTOP
+          cp "$APP/andromic-launcher.desktop" "$APP/usr/share/applications/andromic-launcher.desktop"
+          cat > "$APP/AppRun" <<'APPRUN'
+          #!/bin/sh
+          HERE="$(dirname "$(readlink -f "$0")")"
+          exec "$HERE/usr/bin/andromic-launcher" "$@"
+          APPRUN
+          chmod +x "$APP/AppRun" "$APP/usr/bin/andromic-launcher"
+          wget -q "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage" -O appimagetool
+          chmod +x appimagetool
+          ARCH=x86_64 ./appimagetool "$APP" "dist/Andromic-launcher-${VERSION}-linux.AppImage"
+          chmod +x "dist/Andromic-launcher-${VERSION}-linux.AppImage"
+
+      - name: Package macOS (.zip and .pkg)
+        if: runner.os == 'macOS'
+        run: |
+          cd dist
+          zip -r "Andromic-launcher-${VERSION}-macos.zip" "Andromic-launcher-${VERSION}-macos.app"
+          cd ..
+          pkgbuild --component "dist/Andromic-launcher-${VERSION}-macos.app" --install-location /Applications "dist/Andromic-launcher-${VERSION}-macos.pkg"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.os_name }}-build
+          path: |
+            dist/Andromic-launcher-${{ env.VERSION }}-windows.exe
+            dist/Andromic-launcher-${{ env.VERSION }}-linux.zip
+            dist/Andromic-launcher-${{ env.VERSION }}-linux.deb
+            dist/Andromic-launcher-${{ env.VERSION }}-linux.AppImage
+            dist/Andromic-launcher-${{ env.VERSION }}-macos.zip
+            dist/Andromic-launcher-${{ env.VERSION }}-macos.pkg
+          if-no-files-found: ignore
+
+  release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: Set version
+        shell: bash
+        run: echo "VERSION=${GITHUB_REF_NAME}" >> "$GITHUB_ENV"
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Attach binaries to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/Andromic-launcher-${{ env.VERSION }}-windows.exe
+            artifacts/Andromic-launcher-${{ env.VERSION }}-linux.zip
+            artifacts/Andromic-launcher-${{ env.VERSION }}-linux.deb
+            artifacts/Andromic-launcher-${{ env.VERSION }}-linux.AppImage
+            artifacts/Andromic-launcher-${{ env.VERSION }}-macos.zip
+            artifacts/Andromic-launcher-${{ env.VERSION }}-macos.pkg

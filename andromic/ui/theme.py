@@ -1,5 +1,6 @@
 """Colour palettes, font selection and the application stylesheet."""
 from types import SimpleNamespace
+from pathlib import Path
 
 from PySide6.QtGui import QColor, QFont, QFontDatabase
 
@@ -34,10 +35,12 @@ density = "comfortable"
 corner_radius = 22
 font_scale = 100
 background = ""
+wallpaper_path = ""
+frosted_glass = True
 
 
 def set_theme(name: str, accent: str = "", custom: dict = None) -> None:
-    global current, animations, density, corner_radius, font_scale, background
+    global current, animations, density, corner_radius, font_scale, background, wallpaper_path, frosted_glass
     custom = custom or {}
     current = name if name in PALETTES else "light"
     if custom.get("theme") in PALETTES:
@@ -67,6 +70,9 @@ def set_theme(name: str, accent: str = "", custom: dict = None) -> None:
     except (TypeError, ValueError):
         font_scale = 100
     background = ""
+    wallpaper_candidate = str(custom.get("wallpaper_path") or "").strip()
+    wallpaper_path = wallpaper_candidate if wallpaper_candidate and Path(wallpaper_candidate).is_file() else ""
+    frosted_glass = bool(custom.get("frosted_glass", True))
     bg_candidate = QColor(str(custom.get("background") or "")) if custom.get("background") else QColor()
     if bg_candidate.isValid():
         background = bg_candidate.name(QColor.NameFormat.HexRgb)
@@ -111,14 +117,16 @@ QLabel {{ background: transparent; color: {c.text}; }}
 QLabel[muted="true"] {{ color: {c.muted}; }}
 QToolTip {{ background: {c.card}; color: {c.text}; border: 1px solid {c.border};
             padding: 6px 10px; border-radius: 8px; }}
-QFrame#card {{ background: {c.card}; border-radius: {radius}px; }}
+QFrame#card {{ background: {("rgba(18, 25, 40, 166)" if current == "dark" else "rgba(245, 248, 255, 174)") if wallpaper_path and frosted_glass else c.card};
+    border: {("1px solid rgba(255,255,255,54)" if current == "dark" else "1px solid rgba(255,255,255,150)") if wallpaper_path and frosted_glass else "1px solid " + c.border};
+    border-radius: {radius}px; }}
 
-QLineEdit {{ background: {c.field}; color: {c.text}; border: 2px solid transparent;
+QLineEdit {{ background: {("rgba(20, 28, 44, 150)" if current == "dark" else "rgba(255,255,255,155)") if wallpaper_path and frosted_glass else c.field}; color: {c.text}; border: 2px solid transparent;
              border-radius: {field_radius}px; padding: {field_pad}; min-height: {field_height};
              selection-background-color: {c.accent}; selection-color: #FFFFFF; }}
 QLineEdit:focus {{ border: 2px solid {c.accent}; }}
 
-QComboBox {{ background: {c.field}; color: {c.text}; border: 2px solid transparent;
+QComboBox {{ background: {("rgba(20, 28, 44, 150)" if current == "dark" else "rgba(255,255,255,155)") if wallpaper_path and frosted_glass else c.field}; color: {c.text}; border: 2px solid transparent;
              border-radius: {field_radius}px; padding: {field_pad}; min-height: {field_height}; }}
 QComboBox:hover {{ background: {c.field_hover}; }}
 QComboBox:on {{ border: 2px solid {c.accent}; }}

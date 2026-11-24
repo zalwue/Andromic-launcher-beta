@@ -9,27 +9,27 @@ PRESETS: Dict[str, Dict[str, Any]] = {
     "hyperos": {
         "label": "HyperOS", "theme": "light", "accent_color": "#3482FF",
         "density": "comfortable", "animations": True, "background": "",
-        "corner_radius": 22, "font_scale": 100, "sidebar_position": "left",
+        "corner_radius": 22, "font_scale": 100, "sidebar_position": "left", "wallpaper_path": "", "frosted_glass": True,
     },
     "midnight": {
         "label": "Midnight", "theme": "dark", "accent_color": "#7AA2FF",
         "density": "comfortable", "animations": True, "background": "",
-        "corner_radius": 22, "font_scale": 100, "sidebar_position": "left",
+        "corner_radius": 22, "font_scale": 100, "sidebar_position": "left", "wallpaper_path": "", "frosted_glass": True,
     },
     "forest": {
         "label": "Forest", "theme": "light", "accent_color": "#2E7D5B",
         "density": "compact", "animations": True, "background": "",
-        "corner_radius": 18, "font_scale": 100, "sidebar_position": "left",
+        "corner_radius": 18, "font_scale": 100, "sidebar_position": "left", "wallpaper_path": "", "frosted_glass": True,
     },
     "sunset": {
         "label": "Sunset", "theme": "dark", "accent_color": "#FF7A59",
         "density": "comfortable", "animations": True, "background": "",
-        "corner_radius": 24, "font_scale": 105, "sidebar_position": "left",
+        "corner_radius": 24, "font_scale": 105, "sidebar_position": "left", "wallpaper_path": "", "frosted_glass": True,
     },
     "mono": {
         "label": "Mono", "theme": "light", "accent_color": "#4A4A4A",
         "density": "compact", "animations": False, "background": "",
-        "corner_radius": 14, "font_scale": 95, "sidebar_position": "left",
+        "corner_radius": 14, "font_scale": 95, "sidebar_position": "left", "wallpaper_path": "", "frosted_glass": True,
     },
 }
 
@@ -68,6 +68,8 @@ def normalize_customization(data: Optional[dict]) -> Dict[str, Any]:
     merged["sidebar_position"] = ("right" if str(merged.get("sidebar_position")) == "right"
                                   else "left")
     merged["animations"] = bool(merged.get("animations", True))
+    merged["frosted_glass"] = bool(merged.get("frosted_glass", True))
+    merged["wallpaper_path"] = str(merged.get("wallpaper_path") or "").strip()
     try:
         radius = int(merged.get("corner_radius", 22))
     except (TypeError, ValueError):
