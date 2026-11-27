@@ -10,7 +10,7 @@ import zipfile
 from pathlib import Path
 from typing import Optional
 
-from .net import HEADERS, post_json
+from .net import download, HEADERS, post_json
 from .paths import AUTHLIB_INJECTOR
 
 AUTH_BASE = "https://authserver.ely.by"
@@ -125,26 +125,18 @@ def ensure_authlib_injector(target: Optional[Path] = None) -> Path:
     if not asset or not asset.get("browser_download_url"):
         raise RuntimeError("В официальном релизе authlib-injector не найден JAR-файл.")
 
-    download_request = urllib.request.Request(asset["browser_download_url"], headers=HEADERS)
-    try:
-        with urllib.request.urlopen(download_request, timeout=90) as response:
-            payload = response.read()
-    except Exception as exc:
-        raise RuntimeError(f"Не удалось скачать authlib-injector: {exc}") from None
-
     digest = asset.get("digest") or ""
-    if digest.startswith("sha256:"):
-        expected = digest.split(":", 1)[1].lower()
-        actual = hashlib.sha256(payload).hexdigest()
-        if actual != expected:
-            raise RuntimeError("Контрольная сумма authlib-injector не совпадает.")
+    sha256 = digest.split(":", 1)[1].lower() if digest.startswith("sha256:") else None
     target.parent.mkdir(parents=True, exist_ok=True)
-    temporary = target.with_suffix(target.suffix + ".part")
-    temporary.write_bytes(payload)
-    if not _is_valid_jar(temporary):
-        temporary.unlink(missing_ok=True)
+    # Streaming .part download + SHA-256 verify + atomic replace (never fully in RAM).
+    try:
+        download(asset["browser_download_url"], target, sha256=sha256, timeout=90)
+    except Exception as exc:
+        target.unlink(missing_ok=True)
+        raise RuntimeError(f"Не удалось скачать authlib-injector: {exc}") from None
+    if not _is_valid_jar(target):
+        target.unlink(missing_ok=True)
         raise RuntimeError("Скачанный authlib-injector.jar повреждён или не является JAR-файлом.")
-    temporary.replace(target)
     return target
 
 

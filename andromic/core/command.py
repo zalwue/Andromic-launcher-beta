@@ -9,6 +9,7 @@ from .. import __version__
 from .accounts import offline_uuid
 from .paths import ASSETS, LIBRARIES
 from .rules import expand_args
+from .servers import validate_address as servers_validate_address
 from .system import CLASSPATH_SEP, OS
 
 _G1_FLAGS = [
@@ -101,11 +102,13 @@ def build_command(version: dict, version_id: str, java: str, settings: dict, nic
         game += ["--width", width, "--height", height]
     if server and not supports_quick_play:
         # IPv6 addresses without brackets are ambiguous; keep the host intact
-        # and fall back to the default port in that case.
-        host, sep, port = server.rpartition(":")
-        if not sep or not port.isdigit() or ":" in host:
-            host, port = server, "25565"
-        game += ["--server", host, "--port", port or "25565"]
+        # and fall back to the default port in that case.  Strictly-validated
+        # saved servers are ``host:port`` / ``[ipv6]:port``.
+        try:
+            host, port = servers_validate_address(server)
+        except ValueError:
+            host, port = server, 25565
+        game += ["--server", host, "--port", str(port or 25565)]
 
     memory = [f"-Xmx{settings.get('ram', 4096)}M",
               f"-Xms{min(int(settings.get('ram', 4096)), 1024)}M"]

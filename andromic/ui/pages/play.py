@@ -97,12 +97,19 @@ class PlayPage:
         self.play_button = Button(_("Play"), "primary", 58, icon="play", size=14, bold=True)
         self.play_button.clicked.connect(lambda _checked=False: self.start())
         root.addWidget(self.play_button)
+        self.cancel_button = Button(_("Cancel download"), "danger", 38)
+        self.cancel_button.setEnabled(False)
+        self.cancel_button.clicked.connect(lambda _checked=False: self.cancel_download())
+        root.addWidget(self.cancel_button)
+        self.download_label = label("", 10, muted=True)
+        root.addWidget(self.download_label)
         self.progress = QProgressBar()
         self.progress.setTextVisible(False)
         self.progress.setRange(0, 1)
         root.addWidget(self.progress)
         self.status = label("", 10, muted=True)
         root.addWidget(self.status)
+        self._cancel_token = None
 
         tools = QHBoxLayout()
         for text, callback in ((_("Open folder"), self.open_folder),
@@ -128,6 +135,30 @@ class PlayPage:
         self.progress.setValue(done)
         if text:
             self.set_status(f"{text} ({done}/{total})")
+
+    def set_download_progress(self, info):
+        """Real-time download speed (B/s) + ETA + byte progress (Stage 3)."""
+        from ...core.net import format_bytes, format_eta, format_speed
+        fraction = getattr(info, "fraction", 0.0) or 0.0
+        total = max(1, getattr(info, "files_total", 1) or 1)
+        self.progress.setRange(0, 1000)
+        self.progress.setValue(round(fraction * 1000))
+        speed = format_speed(getattr(info, "speed_bps", 0.0) or 0.0)
+        eta = format_eta(getattr(info, "eta_seconds", None))
+        done_bytes = format_bytes(getattr(info, "done_bytes", 0) or 0)
+        total_bytes = format_bytes(getattr(info, "total_bytes", 0) or 0)
+        files = f"{getattr(info, 'files_done', 0)}/{getattr(info, 'files_total', 0)}"
+        label_text = getattr(info, "label", "") or ""
+        current = getattr(info, "current_file", "") or ""
+        parts = [p for p in (label_text, current, f"{done_bytes} / {total_bytes}",
+                             speed, _("ETA") + " " + eta, files) if p]
+        self.download_label.setText("   ·   ".join(parts))
+
+    def cancel_download(self):
+        token = self._cancel_token
+        if token is not None:
+            token.cancel()
+            self.download_label.setText(_("Cancelling…"))
 
     def _account_labels(self):
         labels, seen = {}, set()
@@ -275,18 +306,25 @@ class PlayPage:
         app.save()
         app.busy = True
         self.play_button.setEnabled(False)
+        from ...core.net import CancelToken
+        self._cancel_token = CancelToken()
+        self.cancel_button.setEnabled(True)
         cfg = dict(app.cfg)
         launcher = GameLauncher(app.manifest, app.rep)
+        cancel_token = self._cancel_token
 
         def job():
             return launcher.run(
                 cfg, inst, acc,
                 on_java=lambda major: app.ui(self.set_java, major),
-                on_start=(lambda: app.ui(app.window.hide)) if cfg["hide_launcher"] else None)
+                on_start=(lambda: app.ui(app.window.hide)) if cfg["hide_launcher"] else None,
+                cancel=cancel_token)
 
         def finished(code):
             app.busy = False
             self.play_button.setEnabled(True)
+            self.cancel_button.setEnabled(False)
+            self._cancel_token = None
             app.window.show()
             self.set_status(_("Ready") if code == 0 else
                             _("Game exited with code {code}").format(code=code))
@@ -307,6 +345,8 @@ class PlayPage:
         def failed(_exc):
             app.busy = False
             self.play_button.setEnabled(True)
+            self.cancel_button.setEnabled(False)
+            self._cancel_token = None
             app.window.show()
 
         app.run_async(job, finished, failed)

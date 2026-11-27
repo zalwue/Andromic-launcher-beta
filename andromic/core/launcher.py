@@ -4,7 +4,7 @@ import subprocess
 from collections import deque
 from typing import Callable, List, Optional
 
-from . import accounts, ely, optifine
+from . import accounts, ely, net, optifine
 from .assets import install_assets, logging_argument
 from .command import build_command
 from .config import sanitize_settings, save_config
@@ -49,6 +49,8 @@ class GameLauncher:
         slug = "fabric-api" if inst["loader"] == "Fabric" else "qsl"
         try:
             install_project(slug, mods, inst["mc"], mod_loaders(inst["loader"]), True, self.rep.log)
+        except net.DownloadCancelled:
+            raise
         except Exception as exc:
             self.rep.log(f"Fabric API installation skipped: {exc}")
 
@@ -70,9 +72,21 @@ class GameLauncher:
 
     def run(self, cfg: dict, inst: dict, account: dict,
             on_java: Optional[Callable[[int], None]] = None,
-            on_start: Optional[Callable[[], None]] = None) -> int:
+            on_start: Optional[Callable[[], None]] = None,
+            cancel: "Optional[net.CancelToken]" = None) -> int:
         rep = self.rep
         settings = sanitize_settings(cfg)
+        # Apply download concurrency to every download in this session.
+        net.set_thread_mode(settings["download_threads"], settings["download_threads_manual"])
+        previous_cancel = net.set_default_cancel(cancel)
+        try:
+            if cancel is not None:
+                cancel.raise_if_cancelled()
+            return self._run_inner(cfg, inst, account, settings, on_java, on_start, rep)
+        finally:
+            net.set_default_cancel(previous_cancel)
+
+    def _run_inner(self, cfg, inst, account, settings, on_java, on_start, rep) -> int:
         authlib_path = ""
         if account.get("type") == "ely":
             rep.status("Refreshing Ely.by session")
@@ -124,3 +138,6 @@ class GameLauncher:
         code = proc.wait()
         rep.log(f"Game exited with code {code}")
         return code
+
+    def _restore_download_state(self, previous_cancel) -> None:
+        net.set_default_cancel(previous_cancel)

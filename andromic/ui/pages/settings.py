@@ -1,8 +1,9 @@
 from PySide6.QtCore import QTimer, Qt
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (QColorDialog, QFileDialog, QFrame, QHBoxLayout, QScrollArea,
-                               QVBoxLayout, QWidget)
+                               QSpinBox, QVBoxLayout, QWidget)
 
+from ...core import net
 from ...core.system import open_path, total_ram_mb
 from ...core import updater
 from ...i18n import tr as _
@@ -123,10 +124,35 @@ class SettingsPage:
         language = Segmented([("ru", "Русский"), ("en", "English")], cfg["lang"])
         language.changed.connect(lambda value: self._restyle("lang", value))
         launcher.addWidget(language, 0, Qt.AlignmentFlag.AlignLeft)
-        caption(launcher, _("Accent colour (Mimuix / HyperOS)"))
+        caption(launcher, _("Accent colour (MIUIX / HyperOS)"))
         self.accent_button = Button(cfg.get("accent_color", "#3482FF"), "tonal", 36)
         self.accent_button.clicked.connect(lambda _c=False: self._choose_accent())
         launcher.addWidget(self.accent_button, 0, Qt.AlignmentFlag.AlignLeft)
+
+        downloads = section(right, _("Downloads"))
+        downloads.addWidget(label(
+            _("Parallel download threads for Minecraft, Java Runtime, libraries, "
+              "assets, mods and modpacks."), 9, muted=True, wrap=True))
+        caption(downloads, _("Download mode"))
+        self.download_mode = Segmented([
+            ("economy", _("Economy")), ("balanced", _("Balanced")),
+            ("fast", _("Fast")), ("maximum", _("Maximum")), ("manual", _("Manual")),
+        ], cfg.get("download_threads", "fast"))
+        self.download_mode.changed.connect(self._set_download_mode)
+        downloads.addWidget(self.download_mode, 0, Qt.AlignmentFlag.AlignLeft)
+        caption(downloads, _("Manual thread count"))
+        self.manual_row = QHBoxLayout()
+        self.manual_threads = QSpinBox()
+        self.manual_threads.setRange(1, 32)
+        self.manual_threads.setValue(int(cfg.get("download_threads_manual", 8)))
+        self.manual_threads.valueChanged.connect(self._set_manual_threads)
+        self.manual_row.addWidget(self.manual_threads, 0)
+        self.manual_row.addStretch()
+        downloads.addLayout(self.manual_row)
+        self._update_manual_visibility()
+        downloads.addWidget(label(
+            _("Modes: Economy 2 · Balanced 4 · Fast 8 · Maximum 12 · Manual. "
+              "Default: Fast."), 9, muted=True, wrap=True))
 
         updates = section(right, _("Updates"))
         updates.addWidget(label(_("Check GitHub Releases when Andromic starts."),
@@ -202,6 +228,21 @@ class SettingsPage:
     def _restyle(self, key, value):
         self.app.cfg[key] = value
         QTimer.singleShot(120, self.app.rebuild)
+
+    def _set_download_mode(self, value):
+        self.app.cfg["download_threads"] = value
+        self._update_manual_visibility()
+        net.set_thread_mode(value, self.app.cfg.get("download_threads_manual", 8))
+        self.app.save()
+
+    def _set_manual_threads(self, value):
+        self.app.cfg["download_threads_manual"] = int(value)
+        net.set_thread_mode(self.app.cfg.get("download_threads", "fast"), int(value))
+        self.app.save()
+
+    def _update_manual_visibility(self):
+        manual = self.download_mode.value == "manual"
+        self.manual_threads.setEnabled(manual)
 
     def refresh(self):
         pass

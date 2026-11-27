@@ -565,6 +565,17 @@ class CustomizationTests(unittest.TestCase):
         self.assertIn(customization.readable_text("#FFFFFF"), ("#000000", "#FFFFFF"))
         self.assertEqual(len(customization.list_presets()), len(customization.PRESETS))
 
+    def test_andromic_is_the_new_default_navy_preset(self):
+        self.assertEqual(customization.DEFAULT_CUSTOMIZATION["preset"], "andromic")
+        self.assertEqual(customization.DEFAULT_CUSTOMIZATION["theme"], "dark")
+        self.assertEqual(customization.DEFAULT_CUSTOMIZATION["accent_color"], "#6AA8FF")
+        self.assertIn("hyperos", customization.PRESETS)
+        self.assertEqual(customization.PRESETS["hyperos"]["theme"], "light")
+        default = customization.from_config({})
+        self.assertEqual(default["preset"], "andromic")
+        self.assertEqual(default["theme"], "dark")
+        self.assertTrue(default["frosted_glass"])
+
     def test_presets_save_export_import(self):
         cfg = {"theme": "light", "accent_color": "#3482FF"}
         custom = customization.apply_preset(cfg, "midnight")
@@ -582,14 +593,13 @@ class CustomizationTests(unittest.TestCase):
         self.assertFalse(updated["animations"])
         self.assertEqual(updated["sidebar_position"], "right")
         self.assertTrue(updated["frosted_glass"])
-        self.assertEqual(updated["wallpaper_path"], "")
+        self.assertNotIn("wallpaper_path", updated)
         self.assertEqual(cfg["theme"], "light")
 
         glass = customization.save_customization(cfg, {
             "preset": "midnight", "theme": "dark", "accent_color": "#7AA2FF",
-            "wallpaper_path": "/tmp/andromic-wallpaper.jpg", "frosted_glass": False,
+            "frosted_glass": False,
         })
-        self.assertEqual(glass["wallpaper_path"], "/tmp/andromic-wallpaper.jpg")
         self.assertFalse(glass["frosted_glass"])
 
         text = customization.export_theme(updated)
@@ -659,13 +669,13 @@ class PackagingTests(unittest.TestCase):
             archive_path = Path(temp) / "release.zip"
             with zipfile.ZipFile(archive_path, "w", zipfile.ZIP_DEFLATED) as archive:
                 for relative in expected + ["main.py", "requirements.txt",
-                                            "assets/icon.png", "build.sh", "build.bat"]:
+                                            "build.sh", "build.bat"]:
                     archive.write(root / relative, relative)
             with zipfile.ZipFile(archive_path) as archive:
                 names = set(archive.namelist())
             self.assertTrue(set(expected) <= names)
             self.assertIn("main.py", names)
-            self.assertIn("assets/icon.png", names)
+            self.assertNotIn("assets/icon.png", names)
 
     def test_qt_cpu_compatibility_policy_is_pinned(self):
         root = Path(__file__).resolve().parents[1]
@@ -674,7 +684,7 @@ class PackagingTests(unittest.TestCase):
         version = (root / "andromic" / "__init__.py").read_text("utf-8")
         self.assertIn("PySide6==6.9.3", requirements)
         self.assertIn('dependencies = ["PySide6==6.9.3"]', project)
-        self.assertIn('2.1.0b1', version)
+        self.assertIn('2.3.0.dev0', version)
         smoke = root / "tools" / "qt_cpu_smoke.py"
         self.assertTrue(smoke.is_file())
         py_compile.compile(str(smoke), doraise=True)

@@ -12,12 +12,18 @@ Written in Python with a PySide6 (Qt) interface. Runs on Windows, Linux and macO
 - Vanilla, Fabric, Quilt, Forge, NeoForge and OptiFine
 - Automatic Java selection (8, 17, 21, 25) per Minecraft version; the runtime is downloaded
   on demand from Mojang, with Eclipse Temurin as a fallback
+- Streaming downloader: `.part` files, SHA-1 + size verification, atomic rename, retries,
+  cancellation, real speed + ETA, and concurrency modes
+  (Economy 2 / Balanced 4 / Fast 8 / Maximum 12 / Manual; default Fast)
+  applied to Minecraft, Java Runtime, libraries, assets, mods and modpacks
 - Memory, resolution, render distance, FPS limit, graphics mode and JVM flags
-- Modrinth integration: mods, resource packs, shaders and modpacks (`.mrpack`)
+- Modrinth integration: rich project cards, detailed view, mods, resource packs,
+  shaders and modpacks (`.mrpack`); installed content on a separate «Installed» tab
 - Automatic Fabric API installation
 - One-click performance preset (Sodium, Lithium, Iris and friends)
 - Separate instances with their own mods, packs and worlds
-- Server list with live status (players, latency, version) and one-click join
+- Server list with live status (players, latency, version), recommended servers,
+  custom server add/edit/remove (`host:port`, default port 25565) and one-click join
 - World manager: rename, duplicate, export and import worlds, with safe NBT metadata editing
 - Backup manager: world or full-instance archives, manifests, verification, restore and retention
 - Per-instance screenshot gallery and crash log analyser with conservative one-click fixes
@@ -27,7 +33,7 @@ Written in Python with a PySide6 (Qt) interface. Runs on Windows, Linux and macO
 - Customization presets: accent colour, density, corner radius, font scale, animations and background
 - Prism Launcher / MultiMC ZIP import and Modrinth `.mrpack` import (drag and drop supported)
 - GitHub Releases update checks at startup and one-click download for the current OS
-- Custom Mimuix / HyperOS accent colour
+- Custom MIUIX / HyperOS accent colour (Liquid Glass)
 - Light and dark themes, English and Russian interface
 
 ## Run from source

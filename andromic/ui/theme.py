@@ -1,6 +1,11 @@
-"""Colour palettes, font selection and the application stylesheet."""
+"""Colour palettes, font selection and the application stylesheet.
+
+Stage 3: modern sans-serif typography (Inter preferred, then high-quality
+system sans), antialiasing, DPI scaling, no unnecessary text shadows/outlines,
+and a Liquid Glass layer with per-layer opacity independent of any background
+image.  Glass still works when no background image is enabled.
+"""
 from types import SimpleNamespace
-from pathlib import Path
 
 from PySide6.QtGui import QColor, QFont, QFontDatabase
 
@@ -9,25 +14,31 @@ from . import icons
 PALETTES = {
     "light": dict(
         bg="#F2F4F7", card="#FFFFFF", field="#F0F2F5", field_hover="#E6E9EE",
-        text="#17181C", muted="#8B909B", accent="#3482FF", accent_hover="#2A6FE0",
+        text="#17181C", muted="#5C6270", accent="#3482FF", accent_hover="#2A6FE0",
         accent_soft="#DDEAFF", on_accent="#FFFFFF", seg_bg="#E6E9EE", seg_active="#FFFFFF",
         track="#DFE3E9", border="#DDE0E6", danger="#F5483B",
     ),
     "dark": dict(
-        bg="#0C0D10", card="#18191E", field="#23252B", field_hover="#2C2F36",
-        text="#F1F2F5", muted="#8C919C", accent="#3482FF", accent_hover="#4A92FF",
-        accent_soft="#1D2C4A", on_accent="#FFFFFF", seg_bg="#23252B", seg_active="#3A3D46",
-        track="#2C2F36", border="#2A2C33", danger="#FF5A4D",
+        # Deep navy base with cool blue surfaces and readable muted text.
+        bg="#0A1220", card="#111D30", field="#17263D", field_hover="#203550",
+        text="#EDF4FF", muted="#A4B4CA", accent="#6AA8FF", accent_hover="#8AB9FF",
+        accent_soft="#1C3556", on_accent="#071426", seg_bg="#17263D", seg_active="#263D5D",
+        track="#263B59", border="#2A4162", danger="#FF737A",
     ),
 }
 
 colors = SimpleNamespace(**PALETTES["light"])
 current = "light"
-_family = "Segoe UI"
+_family = "Inter"
 _mono = "Consolas"
-_PREFERRED = ("MiSans", "HarmonyOS Sans", "Segoe UI Variable Text", "Segoe UI", "SF Pro Text",
-              "Helvetica Neue", "Inter", "Roboto", "Noto Sans", "DejaVu Sans")
-_MONO = ("Cascadia Mono", "Consolas", "Menlo", "DejaVu Sans Mono", "Courier New")
+# Modern sans-serif preference order. Inter first; then quality system sans.
+# MiSans is a MIUIX system font, used only when already installed.
+_PREFERRED = ("Inter", "Inter Variable", "MiSans", "HarmonyOS Sans",
+              "Segoe UI Variable Text", "Segoe UI Variable", "SF Pro Text", "SF Pro Display",
+              "Helvetica Neue", "Roboto", "Noto Sans", "Noto Sans CJK", "Ubuntu",
+              "Cantarell", "DejaVu Sans", "Segoe UI", "Arial", "sans-serif")
+_MONO = ("Cascadia Mono", "JetBrains Mono", "Consolas", "SF Mono", "Menlo",
+         "DejaVu Sans Mono", "Courier New", "monospace")
 
 # Appearance options controlled by the Customization page.
 animations = True
@@ -35,12 +46,21 @@ density = "comfortable"
 corner_radius = 22
 font_scale = 100
 background = ""
-wallpaper_path = ""
 frosted_glass = True
+# Liquid Glass per-layer opacity (0..1) + backdrop blur radius (px).
+glass_window_opacity = 0.82
+glass_panel_opacity = 0.58
+glass_border_opacity = 0.55
+glass_blur_radius = 18
+background_image = ""
+use_background_image = False
+_font_family_override = ""
 
 
 def set_theme(name: str, accent: str = "", custom: dict = None) -> None:
-    global current, animations, density, corner_radius, font_scale, background, wallpaper_path, frosted_glass
+    global current, animations, density, corner_radius, font_scale, background, frosted_glass
+    global glass_window_opacity, glass_panel_opacity, glass_border_opacity, glass_blur_radius
+    global background_image, use_background_image, _font_family_override, _family
     custom = custom or {}
     current = name if name in PALETTES else "light"
     if custom.get("theme") in PALETTES:
@@ -70,13 +90,28 @@ def set_theme(name: str, accent: str = "", custom: dict = None) -> None:
     except (TypeError, ValueError):
         font_scale = 100
     background = ""
-    wallpaper_candidate = str(custom.get("wallpaper_path") or "").strip()
-    wallpaper_path = wallpaper_candidate if wallpaper_candidate and Path(wallpaper_candidate).is_file() else ""
     frosted_glass = bool(custom.get("frosted_glass", True))
     bg_candidate = QColor(str(custom.get("background") or "")) if custom.get("background") else QColor()
     if bg_candidate.isValid():
         background = bg_candidate.name(QColor.NameFormat.HexRgb)
         palette["bg"] = background
+
+    def _pct(key, default):
+        try:
+            return min(1.0, max(0.0, int(custom.get(key, default)) / 100.0))
+        except (TypeError, ValueError):
+            return default / 100.0
+
+    glass_window_opacity = _pct("glass_window_opacity", 82)
+    glass_panel_opacity = _pct("glass_panel_opacity", 58)
+    glass_border_opacity = _pct("glass_border_opacity", 55)
+    try:
+        glass_blur_radius = min(48, max(0, int(custom.get("glass_blur_radius", 18))))
+    except (TypeError, ValueError):
+        glass_blur_radius = 18
+    background_image = str(custom.get("background_image") or "").strip()
+    use_background_image = bool(custom.get("use_background_image", False))
+    _font_family_override = str(custom.get("font_family") or "").strip()
     for key, value in palette.items():
         setattr(colors, key, value)
 
@@ -85,21 +120,57 @@ def init_fonts() -> QFont:
     global _family, _mono
     available = set(QFontDatabase.families())
     _family = next((f for f in _PREFERRED if f in available), _family)
+    if _font_family_override and _font_family_override in available:
+        _family = _font_family_override
     _mono = next((f for f in _MONO if f in available), _mono)
     return font(10)
 
 
+def set_font_family(name: str) -> None:
+    global _family
+    if name and name in set(QFontDatabase.families()):
+        _family = name
+    init_fonts()
+
+
+def _quality(font: QFont) -> QFont:
+    # Crisp antialiased text; never render text from upscaled low-res bitmaps.
+    try:
+        font.setStyleStrategy(QFont.StyleStrategy.PreferAntialias | QFont.StyleStrategy.PreferQuality)
+    except Exception:
+        try:
+            font.setStyleStrategy(QFont.StyleStrategy.PreferAntialias)
+        except Exception:
+            pass
+    try:
+        font.setHintingPreference(QFont.HintingPreference.PreferFullHinting)
+    except Exception:
+        pass
+    return font
+
+
 def font(size: float = 10, bold: bool = False) -> QFont:
-    f = QFont(_family)
+    family = _font_family_override or _family
+    f = QFont(family)
+    # Point size scales with OS DPI; font_scale is an independent user factor.
     f.setPointSizeF(float(size) * (font_scale / 100.0))
     f.setBold(bold)
-    return f
+    # Sensible weights: bold -> semibold for modern look.
+    try:
+        f.setWeight(QFont.Weight.Bold if bold else QFont.Weight.Normal)
+    except Exception:
+        pass
+    return _quality(f)
 
 
 def mono(size: float = 10) -> QFont:
     f = QFont(_mono)
     f.setPointSizeF(float(size) * (font_scale / 100.0))
-    return f
+    return _quality(f)
+
+
+def _rgba(color: QColor, alpha: float) -> str:
+    return f"rgba({color.red()},{color.green()},{color.blue()},{max(0, min(255, round(alpha * 255)))})"
 
 
 def stylesheet() -> str:
@@ -111,25 +182,38 @@ def stylesheet() -> str:
     field_pad = "5px 12px" if compact else "8px 16px"
     field_height = "18px" if compact else "22px"
     item_pad = "6px 10px" if compact else "10px 12px"
+
+    glass = frosted_glass
+    if glass:
+        window_bg = _rgba(QColor(c.bg), glass_window_opacity)
+        # Card painting is done in Card.paintEvent (real backdrop blur);
+        # stylesheet keeps it transparent.
+        field_bg = _rgba(QColor(c.field), min(1.0, glass_panel_opacity + 0.18))
+        field_focus_border = c.accent
+    else:
+        window_bg = c.bg
+        field_bg = c.field
+        field_focus_border = c.accent
+
     return f"""
-QMainWindow, QDialog, #root {{ background: {c.bg}; }}
+QMainWindow {{ background: transparent; }}
+#root {{ background: {window_bg}; }}
+QDialog {{ background: {c.bg}; }}
 QLabel {{ background: transparent; color: {c.text}; }}
 QLabel[muted="true"] {{ color: {c.muted}; }}
 QToolTip {{ background: {c.card}; color: {c.text}; border: 1px solid {c.border};
             padding: 6px 10px; border-radius: 8px; }}
-QFrame#card {{ background: {("rgba(18, 25, 40, 166)" if current == "dark" else "rgba(245, 248, 255, 174)") if wallpaper_path and frosted_glass else c.card};
-    border: {("1px solid rgba(255,255,255,54)" if current == "dark" else "1px solid rgba(255,255,255,150)") if wallpaper_path and frosted_glass else "1px solid " + c.border};
-    border-radius: {radius}px; }}
+QFrame#card {{ background: transparent; border: none; border-radius: {radius}px; }}
 
-QLineEdit {{ background: {("rgba(20, 28, 44, 150)" if current == "dark" else "rgba(255,255,255,155)") if wallpaper_path and frosted_glass else c.field}; color: {c.text}; border: 2px solid transparent;
+QLineEdit {{ background: {field_bg}; color: {c.text}; border: 1px solid transparent;
              border-radius: {field_radius}px; padding: {field_pad}; min-height: {field_height};
              selection-background-color: {c.accent}; selection-color: #FFFFFF; }}
-QLineEdit:focus {{ border: 2px solid {c.accent}; }}
+QLineEdit:focus {{ border: 1px solid {field_focus_border}; }}
 
-QComboBox {{ background: {("rgba(20, 28, 44, 150)" if current == "dark" else "rgba(255,255,255,155)") if wallpaper_path and frosted_glass else c.field}; color: {c.text}; border: 2px solid transparent;
+QComboBox {{ background: {field_bg}; color: {c.text}; border: 1px solid transparent;
              border-radius: {field_radius}px; padding: {field_pad}; min-height: {field_height}; }}
 QComboBox:hover {{ background: {c.field_hover}; }}
-QComboBox:on {{ border: 2px solid {c.accent}; }}
+QComboBox:on {{ border: 1px solid {c.accent}; }}
 QComboBox::drop-down {{ border: none; width: 34px; subcontrol-origin: padding;
                         subcontrol-position: center right; }}
 QComboBox::down-arrow {{ image: url({chevron}); width: 12px; height: 12px; }}
@@ -143,6 +227,11 @@ QListWidget {{ background: transparent; border: none; outline: 0; color: {c.text
 QListWidget::item {{ padding: {item_pad}; border-radius: {max(6, radius - 10)}px; }}
 QListWidget::item:hover:!selected {{ background: {c.field}; }}
 QListWidget::item:selected {{ background: {c.accent_soft}; color: {c.accent}; }}
+
+QTabWidget::pane {{ border: none; background: transparent; }}
+QTabBar::tab {{ background: transparent; color: {c.muted}; padding: 8px 16px; border: none;
+                border-radius: 10px; margin-right: 4px; }}
+QTabBar::tab:selected {{ background: {c.accent_soft}; color: {c.accent}; }}
 
 QPlainTextEdit {{ background: {c.card}; color: {c.text}; border: none;
                   border-radius: {radius}px; padding: 14px; }}

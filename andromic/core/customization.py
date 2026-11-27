@@ -5,36 +5,52 @@ import json
 import re
 from typing import Any, Dict, Optional
 
+# Liquid Glass: per-layer opacity + blur + typography + background image.
+GLASS_DEFAULTS: Dict[str, Any] = {
+    "glass_window_opacity": 82,   # 0..100, window backdrop layer
+    "glass_panel_opacity": 58,    # 0..100, card/panel tint layer
+    "glass_border_opacity": 55,   # 0..100, hairline border layer
+    "glass_blur_radius": 18,      # px backdrop blur
+    "font_family": "",            # empty = automatic modern sans
+    "background_image": "",       # optional image path
+    "use_background_image": False,
+}
+
 PRESETS: Dict[str, Dict[str, Any]] = {
+    "andromic": {
+        "label": "Andromic", "theme": "dark", "accent_color": "#6AA8FF",
+        "density": "comfortable", "animations": True, "background": "",
+        "corner_radius": 20, "font_scale": 100, "sidebar_position": "left", "frosted_glass": True,
+    },
     "hyperos": {
         "label": "HyperOS", "theme": "light", "accent_color": "#3482FF",
         "density": "comfortable", "animations": True, "background": "",
-        "corner_radius": 22, "font_scale": 100, "sidebar_position": "left", "wallpaper_path": "", "frosted_glass": True,
+        "corner_radius": 22, "font_scale": 100, "sidebar_position": "left", "frosted_glass": True,
     },
     "midnight": {
         "label": "Midnight", "theme": "dark", "accent_color": "#7AA2FF",
         "density": "comfortable", "animations": True, "background": "",
-        "corner_radius": 22, "font_scale": 100, "sidebar_position": "left", "wallpaper_path": "", "frosted_glass": True,
+        "corner_radius": 22, "font_scale": 100, "sidebar_position": "left", "frosted_glass": True,
     },
     "forest": {
         "label": "Forest", "theme": "light", "accent_color": "#2E7D5B",
         "density": "compact", "animations": True, "background": "",
-        "corner_radius": 18, "font_scale": 100, "sidebar_position": "left", "wallpaper_path": "", "frosted_glass": True,
+        "corner_radius": 18, "font_scale": 100, "sidebar_position": "left", "frosted_glass": True,
     },
     "sunset": {
         "label": "Sunset", "theme": "dark", "accent_color": "#FF7A59",
         "density": "comfortable", "animations": True, "background": "",
-        "corner_radius": 24, "font_scale": 105, "sidebar_position": "left", "wallpaper_path": "", "frosted_glass": True,
+        "corner_radius": 24, "font_scale": 105, "sidebar_position": "left", "frosted_glass": True,
     },
     "mono": {
         "label": "Mono", "theme": "light", "accent_color": "#4A4A4A",
         "density": "compact", "animations": False, "background": "",
-        "corner_radius": 14, "font_scale": 95, "sidebar_position": "left", "wallpaper_path": "", "frosted_glass": True,
+        "corner_radius": 14, "font_scale": 95, "sidebar_position": "left", "frosted_glass": True,
     },
 }
 
-DEFAULT_CUSTOMIZATION: Dict[str, Any] = dict(PRESETS["hyperos"])
-DEFAULT_CUSTOMIZATION["preset"] = "hyperos"
+DEFAULT_CUSTOMIZATION: Dict[str, Any] = dict(PRESETS["andromic"])
+DEFAULT_CUSTOMIZATION["preset"] = "andromic"
 
 _HEX_RE = re.compile(r"^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
 
@@ -54,9 +70,9 @@ def normalize_hex(value: Any, fallback: str = "#3482FF") -> str:
 def normalize_customization(data: Optional[dict]) -> Dict[str, Any]:
     source = dict(DEFAULT_CUSTOMIZATION)
     source.update(data or {})
-    preset_name = str(source.get("preset") or "hyperos")
+    preset_name = str(source.get("preset") or "andromic")
     if preset_name not in PRESETS:
-        preset_name = "hyperos"
+        preset_name = "andromic"
     merged = dict(PRESETS[preset_name])
     merged.update(data or {})
     merged["preset"] = preset_name
@@ -69,7 +85,20 @@ def normalize_customization(data: Optional[dict]) -> Dict[str, Any]:
                                   else "left")
     merged["animations"] = bool(merged.get("animations", True))
     merged["frosted_glass"] = bool(merged.get("frosted_glass", True))
-    merged["wallpaper_path"] = str(merged.get("wallpaper_path") or "").strip()
+    for key, default in GLASS_DEFAULTS.items():
+        merged.setdefault(key, default)
+    merged["font_family"] = str(merged.get("font_family") or "").strip()
+    merged["background_image"] = str(merged.get("background_image") or "").strip()
+    merged["use_background_image"] = bool(merged.get("use_background_image", False))
+    for key in ("glass_window_opacity", "glass_panel_opacity", "glass_border_opacity"):
+        try:
+            merged[key] = min(100, max(0, int(merged.get(key, default))))
+        except (TypeError, ValueError):
+            merged[key] = GLASS_DEFAULTS[key]
+    try:
+        merged["glass_blur_radius"] = min(48, max(0, int(merged.get("glass_blur_radius", 18))))
+    except (TypeError, ValueError):
+        merged["glass_blur_radius"] = 18
     try:
         radius = int(merged.get("corner_radius", 22))
     except (TypeError, ValueError):
@@ -81,6 +110,8 @@ def normalize_customization(data: Optional[dict]) -> Dict[str, Any]:
         scale = 100
     merged["font_scale"] = min(125, max(85, scale))
     merged.pop("label", None)
+    # Ignore legacy wallpaper settings from older 2.2 development builds.
+    merged.pop("wallpaper_path", None)
     return merged
 
 
@@ -114,7 +145,7 @@ def save_customization(cfg: dict, data: dict) -> Dict[str, Any]:
 
 
 def reset_customization(cfg: dict) -> Dict[str, Any]:
-    return apply_preset(cfg, "hyperos")
+    return apply_preset(cfg, "andromic")
 
 
 def list_presets() -> list:

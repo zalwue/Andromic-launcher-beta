@@ -5,12 +5,12 @@ import traceback
 from pathlib import Path
 
 from PySide6.QtCore import QObject, Qt, Signal
-from PySide6.QtGui import QColor, QIcon, QPainter, QPixmap
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (QApplication, QFrame, QHBoxLayout, QMainWindow,
                                QMessageBox, QScrollArea, QStackedWidget, QVBoxLayout, QWidget)
 
 from .. import APP_NAME, __version__
-from ..core import customization
+from ..core import customization, net
 from ..core.config import load_config, save_config
 from ..core.instances import new_instance
 from ..core.paths import ROOT, ensure_dirs
@@ -19,7 +19,7 @@ from ..core.system import open_path
 from ..core import updater
 from ..core.versions import fetch_manifest, selectable_ids
 from ..i18n import set_language, tr as _
-from . import theme
+from . import glass, theme
 from .pages.console import ConsolePage
 from .pages.content import ContentPage
 from .pages.customization import CustomizationPage
@@ -50,36 +50,6 @@ def _get_icon() -> QIcon:
 
 
 
-class WallpaperWidget(QWidget):
-    """Softened wallpaper backdrop for translucent glass panels."""
-
-    def __init__(self, path="", parent=None):
-        super().__init__(parent)
-        self._path = str(path or "")
-        self._pixmap = QPixmap(self._path) if self._path and Path(self._path).is_file() else QPixmap()
-
-    def paintEvent(self, event):
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
-        if not self._pixmap.isNull():
-            size = self.size()
-            small = self._pixmap.scaled(
-                max(1, size.width() // 16), max(1, size.height() // 16),
-                Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-                Qt.TransformationMode.SmoothTransformation)
-            softened = small.scaled(
-                size, Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-                Qt.TransformationMode.SmoothTransformation)
-            x = max(0, (softened.width() - size.width()) // 2)
-            y = max(0, (softened.height() - size.height()) // 2)
-            source = softened.rect().adjusted(x, y, -x, -y)
-            painter.drawPixmap(self.rect(), softened, source)
-            painter.fillRect(self.rect(), QColor(7, 13, 27, 88))
-        else:
-            painter.fillRect(self.rect(), QColor(theme.colors.bg))
-        painter.end()
-
-
 class Bridge(QObject):
     """Runs callables on the GUI thread; safe to trigger from worker threads."""
 
@@ -103,7 +73,7 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(1000, 680)
     def build(self):
         app = self.app
-        root = WallpaperWidget(app.custom.get("wallpaper_path", ""))
+        root = QWidget()
         root.setObjectName("root")
         layout = QHBoxLayout(root)
         layout.setContentsMargins(20, 20, 20, 20)
@@ -155,6 +125,30 @@ class MainWindow(QMainWindow):
             layout.addWidget(self.stack, 1)
         self.root_widget = root
         self.setCentralWidget(root)
+        self._apply_glass()
+
+    def _apply_glass(self):
+        """Apply Liquid Glass window translucency + optional background image."""
+        try:
+            self._glass_applied = glass.apply_system_backdrop(self, theme.frosted_glass)
+        except Exception:
+            self._glass_applied = False
+        # optional background image layer (glass works with or without it)
+        root = self.root_widget
+        if root is None:
+            return
+        image = theme.background_image if theme.use_background_image else ""
+        if image and Path(image).is_file():
+            safe = str(Path(image)).replace("\\", "/").replace("'", "")
+            root.setStyleSheet(
+                f"#root {{ background-image: url('{safe}');"
+                f" background-position: center; background-repeat: no-repeat; }}")
+        else:
+            root.setStyleSheet("")
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self._apply_glass()
 
     def show_page(self, key):
         app = self.app
@@ -176,18 +170,30 @@ class App:
         set_language(self.cfg["lang"])
         self.custom = customization.from_config(self.cfg)
         theme.set_theme(self.custom["theme"], self.custom["accent_color"], self.custom)
+        # DPI / HiDPI: crisp text and scaling on Windows, Linux and macOS.
+        try:
+            QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)  # no-op on Qt6
+        except Exception:
+            pass
+        try:
+            QApplication.setHighDpiScaleFactorRoundingPolicy(
+                Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
+        except Exception:
+            pass
         self.qt = QApplication.instance() or QApplication(sys.argv)
         self.qt.setApplicationName("Andromic")
         self.qt.setWindowIcon(_get_icon())
         self.qt.setFont(theme.init_fonts())
         self.qt.setStyleSheet(theme.stylesheet())
+        net.apply_thread_config(self.cfg)
         self.bridge = Bridge()
         self.manifest, self.busy, self.pages, self.current_page = [], False, {}, "play"
         self.rep = Reporter(
             log=lambda message: self.ui(self.pages["console"].append, message),
             status=lambda message: self.ui(self.pages["play"].set_status, message),
             progress=lambda done, total, text="": self.ui(self.pages["play"].set_progress,
-                                                         done, total, text))
+                                                         done, total, text),
+            download=lambda info: self.ui(self._download_progress, info))
         self.window = MainWindow(self)
         self.window.build()
         self.show(self.current_page)
@@ -211,10 +217,17 @@ class App:
         threading.Thread(target=worker, daemon=True).start()
 
     def _fail(self, exc, on_error):
-        self.pages["play"].set_status(str(exc))
+        cancelled = isinstance(exc, net.DownloadCancelled)
+        self.pages["play"].set_status(_("Download cancelled") if cancelled else str(exc))
         if on_error:
             on_error(exc)
-        self.error(str(exc))
+        if not cancelled:
+            self.error(str(exc))
+
+    def _download_progress(self, info):
+        page = self.pages.get("play")
+        if page is not None and hasattr(page, "set_download_progress"):
+            page.set_download_progress(info)
 
     # ---- message boxes ----
     def info(self, text):
@@ -309,6 +322,8 @@ class App:
         self.custom = customization.from_config(self.cfg)
         theme.set_theme(self.custom["theme"], self.custom["accent_color"], self.custom)
         self.qt.setStyleSheet(theme.stylesheet())
+        self.qt.setFont(theme.init_fonts())
+        net.apply_thread_config(self.cfg)
         self.window.build()
         self.show(self.current_page)
         if self.manifest:

@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 
 from .constants import RUNTIME_URL
-from .net import download_many, get_json, http_get
+from .net import DownloadCancelled, download, download_many, get_json
 from .paths import RUNTIME
 from .reporter import Reporter
 from .system import (ARCH, JAVA_BIN, OS, POPEN_FLAGS, adoptium_target, make_executable,
@@ -237,7 +237,8 @@ def _adoptium_runtime(major: int, rep: Reporter) -> str:
     rep.status(f"Downloading Java {major}")
     archive = RUNTIME / f"temurin-{major}.archive"
     RUNTIME.mkdir(parents=True, exist_ok=True)
-    archive.write_bytes(http_get(url, 600))
+    # Streaming download with .part + retry + atomic rename (never fully in RAM).
+    download(url, archive, timeout=600)
     dest.mkdir(parents=True, exist_ok=True)
     try:
         if zipfile.is_zipfile(archive):
@@ -283,6 +284,8 @@ def ensure_java(version: dict, override: str, rep: Reporter) -> Tuple[str, int]:
         path = _mojang_runtime(component, rep)
         if path:
             return path, major
+    except DownloadCancelled:
+        raise
     except Exception as exc:
         rep.log(f"Mojang runtime unavailable ({exc}); falling back to Temurin")
     return _adoptium_runtime(major, rep), major

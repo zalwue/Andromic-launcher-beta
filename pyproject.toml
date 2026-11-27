@@ -1,6 +1,6 @@
 [project]
 name = "andromic-launcher"
-version = "2.1.0b1"
+version = "2.3.0.dev0"
 description = "A lightweight offline Minecraft launcher"
 readme = "README.md"
 requires-python = ">=3.9"

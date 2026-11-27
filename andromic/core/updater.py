@@ -92,24 +92,9 @@ def download_update(release: dict, progress=None) -> Path:
         raise RuntimeError("This release has no downloadable build for your operating system.")
     DOWNLOADS.mkdir(parents=True, exist_ok=True)
     target = DOWNLOADS / filename
-    temporary = target.with_name(target.name + ".part")
-    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-    try:
-        with urllib.request.urlopen(request, timeout=30) as response, temporary.open("wb") as out:
-            total = int(response.headers.get("Content-Length", "0") or 0)
-            done = 0
-            while True:
-                chunk = response.read(1024 * 1024)
-                if not chunk:
-                    break
-                out.write(chunk)
-                done += len(chunk)
-                if progress:
-                    progress(done, total)
-        if total and done != total:
-            raise IOError("The update download was incomplete.")
-        temporary.replace(target)
-    except Exception:
-        temporary.unlink(missing_ok=True)
-        raise
+    from .net import download
+    size = asset.get("size") if isinstance(asset.get("size"), int) else None
+    # Streaming .part + size verification + atomic replace + temporary retries.
+    download(url, target, size=size, timeout=30,
+             progress=(lambda done, total: progress(done, total)) if progress else None)
     return target

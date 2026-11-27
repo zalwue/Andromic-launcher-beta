@@ -32,23 +32,97 @@ DEFAULTS = {
     "servers": [],
     "rooms": [],
     "customization": {},
+    # Downloads (Stage 3): concurrency mode + manual worker count.
+    # Modes: economy(2) | balanced(4) | fast(8, default) | maximum(12) | manual
+    "download_threads": "fast",
+    "download_threads_manual": 8,
 }
 
 
 def load_config() -> dict:
     cfg = dict(DEFAULTS)
     try:
-        cfg.update(json.loads(CONFIG_FILE.read_text("utf-8")))
+        loaded = json.loads(CONFIG_FILE.read_text("utf-8"))
+        if isinstance(loaded, dict):
+            cfg.update(loaded)
     except (OSError, ValueError):
         pass
+    migrate_config(cfg)
+    return cfg
+
+
+def migrate_config(cfg: dict) -> dict:
+    """Bring old/partial configs up to the Stage 3 schema in place.
+
+    Unknown keys are preserved; malformed known keys are repaired; servers are
+    normalised; download settings are validated.  Existing saved user data is
+    never dropped wholesale.
+    """
+    # Containers must be lists.
     for key in ("accounts", "instances", "servers", "rooms"):
         if not isinstance(cfg.get(key), list):
             cfg[key] = []
+    if not isinstance(cfg.get("customization"), dict):
+        cfg["customization"] = {}
+    # Fill any missing defaults (old configs from 2.0/2.1/2.2).
+    for key, value in DEFAULTS.items():
+        cfg.setdefault(key, _copy_default(value))
+    # Servers: keep user entries, repair shape, drop unusable ones.
+    cfg["servers"] = normalize_servers(cfg.get("servers"))
+    # Download concurrency settings.
+    mode = str(cfg.get("download_threads") or "fast").strip().lower()
+    aliases = {"eco": "economy", "custom": "manual", "max": "maximum"}
+    mode = aliases.get(mode, mode)
+    cfg["download_threads"] = mode if mode in _THREAD_MODES else "fast"
+    cfg["download_threads_manual"] = _clamp_int(
+        cfg.get("download_threads_manual"), 1, _MAX_WORKERS, 8)
+    # Accounts.
     if not cfg["accounts"]:
         cfg["accounts"] = [new_account()]
-    if cfg["account"] not in {a["id"] for a in cfg["accounts"]}:
-        cfg["account"] = cfg["accounts"][0]["id"]
+    valid_ids = {a.get("id") for a in cfg["accounts"] if isinstance(a, dict)}
+    if cfg.get("account") not in valid_ids:
+        first = next((a for a in cfg["accounts"] if isinstance(a, dict)), None)
+        cfg["account"] = first.get("id") if first else ""
     return cfg
+
+
+def _copy_default(value):
+    if isinstance(value, list):
+        return list(value)
+    if isinstance(value, dict):
+        return dict(value)
+    return value
+
+
+def normalize_servers(entries) -> list:
+    """Normalise persisted server entries; keep valid data, repair the rest."""
+    from .servers import normalize_server_entry
+    if not isinstance(entries, list):
+        return []
+    out = []
+    seen = set()
+    for entry in entries:
+        clean = normalize_server_entry(entry)
+        if clean is None:
+            continue
+        key = clean["address"].lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(clean)
+    return out
+
+
+def _clamp_int(value, low, high, fallback):
+    try:
+        number = int(value)
+    except (TypeError, ValueError, OverflowError):
+        return fallback
+    return max(low, min(high, number))
+
+
+_THREAD_MODES = ("economy", "balanced", "fast", "maximum", "manual")
+_MAX_WORKERS = 32
 
 
 def save_config(cfg: dict) -> None:
@@ -80,4 +154,7 @@ def sanitize_settings(cfg: dict) -> dict:
     bounded_int("render_distance", 2, 32)
     bounded_int("max_fps", 10, 260)
     bounded_int("auto_backup_keep", 1, 50)
+    bounded_int("download_threads_manual", 1, 32)
+    mode = str(out.get("download_threads") or "fast").strip().lower()
+    out["download_threads"] = mode if mode in _THREAD_MODES else "fast"
     return out
