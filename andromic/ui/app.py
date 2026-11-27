@@ -137,6 +137,12 @@ class MainWindow(QMainWindow):
         root = self.root_widget
         if root is None:
             return
+        try:
+            root.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, bool(theme.frosted_glass))
+            root.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, bool(theme.frosted_glass))
+            root.setAutoFillBackground(False)
+        except Exception:
+            pass
         image = theme.background_image if theme.use_background_image else ""
         if image and Path(image).is_file():
             safe = str(Path(image)).replace("\\", "/").replace("'", "")

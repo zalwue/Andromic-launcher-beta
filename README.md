@@ -36,12 +36,6 @@ Written in Python with a PySide6 (Qt) interface. Runs on Windows, Linux and macO
 - Custom MIUIX / HyperOS accent colour (Liquid Glass)
 - Light and dark themes, English and Russian interface
 
-
-<img width="1366" height="768" alt="Снимок экрана_2026-11-23_22-43-54" src="https://github.com/user-attachments/assets/2b1725df-6b9d-4e14-bfe7-83680b0e87da" />
-
-
-
-
 ## Run from source
 
 Requires Python 3.9+.
