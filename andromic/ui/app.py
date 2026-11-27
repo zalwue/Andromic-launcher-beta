@@ -128,21 +128,18 @@ class MainWindow(QMainWindow):
         self._apply_glass()
 
     def _apply_glass(self):
-        """Apply Liquid Glass window translucency + optional background image."""
+        """Opaque window; optional background image. Liquid Glass removed."""
         try:
-            self._glass_applied = glass.apply_system_backdrop(self, theme.frosted_glass)
+            self._glass_applied = glass.apply_system_backdrop(self, False)
         except Exception:
             self._glass_applied = False
-        # optional background image layer (glass works with or without it)
+        try:
+            self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
+        except Exception:
+            pass
         root = self.root_widget
         if root is None:
             return
-        try:
-            root.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, bool(theme.frosted_glass))
-            root.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, bool(theme.frosted_glass))
-            root.setAutoFillBackground(False)
-        except Exception:
-            pass
         image = theme.background_image if theme.use_background_image else ""
         if image and Path(image).is_file():
             safe = str(Path(image)).replace("\\", "/").replace("'", "")

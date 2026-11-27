@@ -47,119 +47,21 @@ def hbox(spacing=8):
 
 
 class Card(QFrame):
-    """Rounded glass surface; add children to `.lay`.
-
-    Liquid Glass: paints a genuinely blurred copy of what is behind the panel
-    (captured from the window) under a translucent tint plus a hairline
-    border — not a flat tinted rectangle.  Independent of any background
-    image; works whenever ``frosted_glass`` is on.  Falls back to an opaque
-    surface when glass is disabled or backdrop capture is unavailable.
-    """
+    """Rounded opaque surface; add children to `.lay`. Liquid Glass removed."""
 
     def __init__(self, margins=(20, 18, 20, 18), spacing=10, shadow=True):
         super().__init__()
         self.setObjectName("card")
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
-        self.setAutoFillBackground(False)
         self.lay = QVBoxLayout(self)
         self.lay.setContentsMargins(*margins)
         self.lay.setSpacing(spacing)
-        self._grabbing = False
-        self._backdrop = None
-        if shadow and not theme.frosted_glass and theme.current == "light":
+        self.lay.setSizeConstraint(QVBoxLayout.SizeConstraint.SetMinimumSize)
+        if shadow and theme.current == "light":
             effect = QGraphicsDropShadowEffect(self)
-            effect.setBlurRadius(20)
-            effect.setOffset(0, 3)
-            effect.setColor(QColor(30, 45, 90, 24))
+            effect.setBlurRadius(18)
+            effect.setOffset(0, 2)
+            effect.setColor(QColor(30, 45, 90, 22))
             self.setGraphicsEffect(effect)
-
-    def paintEvent(self, _event) -> None:
-        if self._grabbing:
-            return
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        rect = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
-        radius = float(theme.corner_radius)
-        path = QPainterPath()
-        path.addRoundedRect(rect, radius, radius)
-        c = theme.colors
-        if theme.frosted_glass:
-            backdrop = self._backdrop
-            if backdrop is not None and not backdrop.isNull():
-                painter.save()
-                painter.setClipPath(path)
-                painter.drawPixmap(0, 0, backdrop)
-                painter.restore()
-            tint = QColor(17, 29, 48) if theme.current == "dark" else QColor(245, 248, 255)
-            tint.setAlpha(round(255 * theme.glass_panel_opacity))
-            painter.fillPath(path, tint)
-            # subtle inner highlight at the top edge (glass sheen)
-            sheen = QColor(255, 255, 255, 18 if theme.current == "dark" else 60)
-            top = QRectF(rect.x(), rect.y(), rect.width(), min(28.0, rect.height() / 3))
-            top_path = QPainterPath()
-            top_path.addRoundedRect(top, radius, radius)
-            painter.save()
-            painter.setClipPath(path)
-            painter.fillPath(top_path, sheen)
-            painter.restore()
-            border = QColor(255, 255, 255) if theme.current == "dark" else QColor(255, 255, 255)
-            border.setAlpha(round(255 * theme.glass_border_opacity))
-        else:
-            painter.fillPath(path, QColor(c.card))
-            border = QColor(c.border)
-        pen = painter.pen()
-        pen.setColor(border)
-        pen.setWidthF(1.0)
-        painter.setPen(pen)
-        painter.setBrush(Qt.BrushStyle.NoBrush)
-        painter.drawPath(path)
-        painter.end()
-
-    def _refresh_backdrop(self):
-        if self._grabbing:
-            return
-        QTimer.singleShot(0, self._do_refresh_backdrop)
-
-    def _do_refresh_backdrop(self):
-        if self._grabbing:
-            return
-        self._backdrop = self._capture()
-        self.update()
-
-    def _capture(self):
-        try:
-            from . import glass
-            if not theme.frosted_glass or not theme.glass_blur_radius:
-                return None
-            top = self.window()
-            if top is None:
-                return None
-            target = QRect(self.mapTo(top, QPoint(0, 0)), self.size())
-            if target.width() <= 0 or target.height() <= 0:
-                return None
-            self._grabbing = True
-            try:
-                shot = top.grab(target)
-            finally:
-                self._grabbing = False
-            if shot.isNull():
-                return None
-            return glass.blur_pixmap(shot, theme.glass_blur_radius)
-        except Exception:
-            self._grabbing = False
-            return None
-
-    def resizeEvent(self, event) -> None:
-        super().resizeEvent(event)
-        self._refresh_backdrop()
-
-    def moveEvent(self, event) -> None:
-        super().moveEvent(event)
-        self._refresh_backdrop()
-
-    def showEvent(self, event) -> None:
-        super().showEvent(event)
-        self._refresh_backdrop()
 
 
 class Button(QPushButton):
@@ -324,7 +226,7 @@ class SliderRow(QWidget):
         self.slider.setValue(round(value / step))
         self.slider.setCursor(Qt.CursorShape.PointingHandCursor)
         self.value_label = label(fmt(self.value()), 10, bold=True)
-        self.value_label.setFixedWidth(96)
+        self.value_label.setMinimumWidth(96)
         self.value_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         row.addWidget(self.slider, 1)
         row.addWidget(self.value_label)
@@ -346,8 +248,10 @@ class Segmented(QWidget):
         self.items = list(items)
         self.value = value if value is not None else self.items[0][0]
         metrics = QFontMetrics(theme.font(10, True))
-        self.widths = [metrics.horizontalAdvance(text) + 36 for _key, text in self.items]
-        self.setFixedSize(sum(self.widths) + 8, height)
+        self.widths = [max(metrics.horizontalAdvance(text) + 36, 52) for _key, text in self.items]
+        self.setMinimumWidth(sum(self.widths) + 8)
+        self.setMinimumHeight(height)
+        self.setMaximumHeight(height)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self._from = self._to = self._target()
         self._t = 1.0

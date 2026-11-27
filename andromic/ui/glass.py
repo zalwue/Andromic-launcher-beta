@@ -115,37 +115,12 @@ def apply_system_backdrop(window, enabled: bool) -> bool:
     """
     if window is None:
         return False
-    # ---- Qt-level translucency (works on every platform; no-op if unsupported) ----
-    for attr, value in (
-        (Qt.WidgetAttribute.WA_TranslucentBackground, bool(enabled)),
-        (Qt.WidgetAttribute.WA_NoSystemBackground, bool(enabled)),
-    ):
-        try:
-            window.setAttribute(attr, value)
-        except Exception:
-            pass
+    # Liquid Glass removed: keep the window opaque; no translucency/blur.
     try:
-        window.setAutoFillBackground(False)
+        window.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
     except Exception:
         pass
-    if sys.platform == "darwin":
-        try:
-            window.setAttribute(Qt.WidgetAttribute.WA_MacNoShadow, bool(enabled))
-        except Exception:
-            pass
-    try:
-        central = window.centralWidget() if hasattr(window, "centralWidget") else None
-        if central is not None:
-            central.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, bool(enabled))
-            central.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, bool(enabled))
-            central.setAutoFillBackground(False)
-    except Exception:
-        pass
-
-    if not enabled:
-        return False
-    if not system_backdrop_supported():
-        return False
+    return False
     applied = False
 
     # ---- Windows 11 DWM system backdrop; Windows 10 Acrylic fallback ----

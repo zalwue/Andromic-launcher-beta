@@ -46,7 +46,7 @@ density = "comfortable"
 corner_radius = 22
 font_scale = 100
 background = ""
-frosted_glass = True
+frosted_glass = False  # Liquid Glass removed in Stage 3 patch
 # Liquid Glass per-layer opacity (0..1) + backdrop blur radius (px).
 glass_window_opacity = 0.82
 glass_panel_opacity = 0.58
@@ -90,7 +90,7 @@ def set_theme(name: str, accent: str = "", custom: dict = None) -> None:
     except (TypeError, ValueError):
         font_scale = 100
     background = ""
-    frosted_glass = bool(custom.get("frosted_glass", True))
+    frosted_glass = False  # Liquid Glass disabled
     bg_candidate = QColor(str(custom.get("background") or "")) if custom.get("background") else QColor()
     if bg_candidate.isValid():
         background = bg_candidate.name(QColor.NameFormat.HexRgb)
@@ -102,13 +102,10 @@ def set_theme(name: str, accent: str = "", custom: dict = None) -> None:
         except (TypeError, ValueError):
             return default / 100.0
 
-    glass_window_opacity = _pct("glass_window_opacity", 82)
-    glass_panel_opacity = _pct("glass_panel_opacity", 58)
-    glass_border_opacity = _pct("glass_border_opacity", 55)
-    try:
-        glass_blur_radius = min(48, max(0, int(custom.get("glass_blur_radius", 18))))
-    except (TypeError, ValueError):
-        glass_blur_radius = 18
+    glass_window_opacity = 1.0
+    glass_panel_opacity = 1.0
+    glass_border_opacity = 1.0
+    glass_blur_radius = 0
     background_image = str(custom.get("background_image") or "").strip()
     use_background_image = bool(custom.get("use_background_image", False))
     _font_family_override = str(custom.get("font_family") or "").strip()
@@ -183,27 +180,19 @@ def stylesheet() -> str:
     field_height = "18px" if compact else "22px"
     item_pad = "6px 10px" if compact else "10px 12px"
 
-    glass = frosted_glass
-    if glass:
-        window_bg = _rgba(QColor(c.bg), glass_window_opacity)
-        # Card painting is done in Card.paintEvent (real backdrop blur);
-        # stylesheet keeps it transparent.
-        field_bg = _rgba(QColor(c.field), min(1.0, glass_panel_opacity + 0.18))
-        field_focus_border = c.accent
-    else:
-        window_bg = c.bg
-        field_bg = c.field
-        field_focus_border = c.accent
+    window_bg = c.bg
+    field_bg = c.field
+    field_focus_border = c.accent
 
     return f"""
-QMainWindow {{ background: transparent; }}
-#root {{ background: {window_bg}; }}
+QMainWindow {{ background: {c.bg}; }}
+#root {{ background: {c.bg}; }}
 QDialog {{ background: {c.bg}; }}
 QLabel {{ background: transparent; color: {c.text}; }}
 QLabel[muted="true"] {{ color: {c.muted}; }}
 QToolTip {{ background: {c.card}; color: {c.text}; border: 1px solid {c.border};
             padding: 6px 10px; border-radius: 8px; }}
-QFrame#card {{ background: transparent; border: none; border-radius: {radius}px; }}
+QFrame#card {{ background: {c.card}; border: 1px solid {c.border}; border-radius: {radius}px; }}
 
 QLineEdit {{ background: {field_bg}; color: {c.text}; border: 1px solid transparent;
              border-radius: {field_radius}px; padding: {field_pad}; min-height: {field_height};

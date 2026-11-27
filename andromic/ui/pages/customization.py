@@ -3,8 +3,8 @@ from pathlib import Path
 
 from PySide6.QtCore import QTimer, Qt
 from PySide6.QtGui import QColor
-from PySide6.QtWidgets import (QColorDialog, QFileDialog, QHBoxLayout, QLineEdit,
-                               QPushButton, QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QColorDialog, QFileDialog, QFrame, QHBoxLayout, QLineEdit,
+                               QPushButton, QScrollArea, QVBoxLayout, QWidget)
 
 from ...core import customization
 from ...i18n import tr as _
@@ -23,9 +23,16 @@ class CustomizationPage:
         root.setSpacing(12)
         root.addWidget(page_title(_("Customization")))
 
-        columns = QHBoxLayout()
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        inner = QWidget()
+        scroll.setWidget(inner)
+        root.addWidget(scroll, 1)
+
+        columns = QHBoxLayout(inner)
+        columns.setContentsMargins(0, 0, 14, 10)
         columns.setSpacing(12)
-        root.addLayout(columns, 1)
 
         presets = Card(margins=(14, 14, 14, 14), spacing=8)
         presets.lay.addWidget(label(_("Theme preset"), 12, bold=True))
@@ -68,38 +75,7 @@ class CustomizationPage:
         options.lay.addWidget(self.density, 0, Qt.AlignmentFlag.AlignLeft)
         self.animations = ToggleRow(_("Animations"), True)
         options.lay.addWidget(self.animations)
-        self.glass = ToggleRow(_("Frosted Glass"), True,
-                               _("Use translucent surfaces with real backdrop blur"))
-        options.lay.addWidget(self.glass)
-        # Liquid Glass: per-layer opacity + blur, independent of background image.
-        options.lay.addWidget(label(_("Glass panel opacity"), 10, muted=True))
-        self.glass_panel_opacity = SliderRow(0, 100, 5, 58, lambda v: f"{v}%")
-        options.lay.addWidget(self.glass_panel_opacity)
-        options.lay.addWidget(label(_("Glass window opacity"), 10, muted=True))
-        self.glass_window_opacity = SliderRow(0, 100, 5, 82, lambda v: f"{v}%")
-        options.lay.addWidget(self.glass_window_opacity)
-        options.lay.addWidget(label(_("Glass border opacity"), 10, muted=True))
-        self.glass_border_opacity = SliderRow(0, 100, 5, 55, lambda v: f"{v}%")
-        options.lay.addWidget(self.glass_border_opacity)
-        options.lay.addWidget(label(_("Backdrop blur"), 10, muted=True))
-        self.glass_blur_radius = SliderRow(0, 48, 2, 18, lambda v: f"{v} px")
-        options.lay.addWidget(self.glass_blur_radius)
-        # Optional background image (glass works with or without it).
-        options.lay.addWidget(label(_("Background image (optional)"), 10, muted=True))
-        bg_row = QHBoxLayout()
-        self.background_image = QLineEdit("")
-        self.background_image.setPlaceholderText(_("Path to image"))
-        bg_pick = QPushButton(_("Browse…"))
-        bg_pick.clicked.connect(lambda _c=False: self._choose_background_image())
-        bg_clear = QPushButton(_("Clear"))
-        bg_clear.clicked.connect(lambda _c=False: self.background_image.clear())
-        bg_row.addWidget(self.background_image, 1)
-        bg_row.addWidget(bg_pick)
-        bg_row.addWidget(bg_clear)
-        options.lay.addLayout(bg_row)
-        self.use_background_image = ToggleRow(_("Use background image"), False)
-        options.lay.addWidget(self.use_background_image)
-        # Typography: modern sans-serif, optional explicit family.
+        # Liquid Glass removed. Typography: modern sans-serif, optional explicit family.
         options.lay.addWidget(label(_("Font family (empty = automatic)"), 10, muted=True))
         self.font_family = QLineEdit("")
         self.font_family.setPlaceholderText(_("Inter, system sans, …"))
@@ -159,13 +135,6 @@ class CustomizationPage:
         self.selected_theme = custom["theme"]
         self.accent.setText(custom["accent_color"])
         self.background.setText(custom.get("background", ""))
-        self.glass.setChecked(bool(custom.get("frosted_glass", True)))
-        self.glass_panel_opacity.slider.setValue(int(custom.get("glass_panel_opacity", 58)) // 5)
-        self.glass_window_opacity.slider.setValue(int(custom.get("glass_window_opacity", 82)) // 5)
-        self.glass_border_opacity.slider.setValue(int(custom.get("glass_border_opacity", 55)) // 5)
-        self.glass_blur_radius.slider.setValue(int(custom.get("glass_blur_radius", 18)) // 2)
-        self.background_image.setText(custom.get("background_image", ""))
-        self.use_background_image.setChecked(bool(custom.get("use_background_image", False)))
         self.font_family.setText(custom.get("font_family", ""))
         self.radius.slider.setValue(int(custom["corner_radius"]) // self.radius.step)
         self.font_scale.slider.setValue(int(custom["font_scale"]) // self.font_scale.step)
@@ -198,13 +167,7 @@ class CustomizationPage:
             "theme": self.selected_theme,
             "accent_color": self.accent.text().strip(),
             "background": self.background.text().strip(),
-            "frosted_glass": self.glass.isChecked(),
-            "glass_panel_opacity": self.glass_panel_opacity.value(),
-            "glass_window_opacity": self.glass_window_opacity.value(),
-            "glass_border_opacity": self.glass_border_opacity.value(),
-            "glass_blur_radius": self.glass_blur_radius.value(),
-            "background_image": self.background_image.text().strip(),
-            "use_background_image": self.use_background_image.isChecked(),
+            "frosted_glass": False,
             "font_family": self.font_family.text().strip(),
             "density": "compact" if self.density.value == "compact" else "comfortable",
             "sidebar_position": self.sidebar_position.value,
